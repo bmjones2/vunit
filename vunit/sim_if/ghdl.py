@@ -133,17 +133,18 @@ class GHDLInterface(SimulatorInterface):  # pylint: disable=too-many-instance-at
         Determine the GHDL backend
         """
         mapping = {
-            "mcode code generator": "mcode",
-            "llvm code generator": "llvm",
-            "GCC back-end code generator": "gcc",
+            r"mcode (JIT )?code generator": "mcode",
+            r"llvm (\d+\.\d+\.\d+ )?code generator": "llvm",
+            r"GCC (back-end|\d+\.\d+\.\d+) code generator": "gcc",
         }
         output = cls._get_version_output(prefix)
         for name, backend in mapping.items():
-            if name in output:
-                LOGGER.debug("Detected GHDL %s", name)
+            match = re.search(name, output)
+            if match:
+                LOGGER.debug("Detected GHDL %s", match.group(0))
                 return backend
 
-        LOGGER.error("Could not detect known LLVM backend by parsing 'ghdl --version'")
+        LOGGER.error("Could not detect known backend by parsing 'ghdl --version'")
         print("Expected to find one of %r" % mapping.keys())
         print("== Output of 'ghdl --version'" + ("=" * 60))
         print(output)
