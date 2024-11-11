@@ -102,9 +102,9 @@ SIMULATORS = {
     },
     "qsim": {
         "vunit_name": "modelsim",
-        "win_path_pattern": "questasim*_*/win*",
-        "linux_path_pattern": None,
-        "output_path": "rivierapro",
+        "win_path_pattern": "questa*/win*",
+        "linux_path_pattern": "questa*/linux*",
+        "output_path": "questasim",
     },
     "ghdl": {
         "vunit_name": "ghdl",
