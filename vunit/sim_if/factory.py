@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2014-2021, Lars Asplund lars.anders.asplund@gmail.com
+# Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 
 """
 Create simulator instances
@@ -13,6 +13,7 @@ from .activehdl import ActiveHDLInterface
 from .ghdl import GHDLInterface
 from .incisive import IncisiveInterface
 from .modelsim import ModelSimInterface
+from .nvc import NVCInterface
 from .rivierapro import RivieraProInterface
 from . import BooleanOption, ListOfStringOption, VHDLAssertLevelOption
 
@@ -33,6 +34,7 @@ class SimulatorFactory(object):
             ActiveHDLInterface,
             GHDLInterface,
             IncisiveInterface,
+            NVCInterface,
         ]
 
     def _extract_compile_options(self):
@@ -80,9 +82,7 @@ class SimulatorFactory(object):
         known_options = sorted(list(self._sim_options.keys()))
 
         if name not in self._sim_options:
-            raise ValueError(
-                "Unknown sim_option %r, expected one of %r" % (name, known_options)
-            )
+            raise ValueError(f"Unknown sim_option {name!r}, expected one of {known_options!r}")
 
         self._sim_options[name].validate(value)
 
@@ -92,9 +92,7 @@ class SimulatorFactory(object):
         """
         known_options = sorted(list(self._compile_options.keys()))
         if name not in known_options:
-            raise ValueError(
-                "Unknown compile_option %r, expected one of %r" % (name, known_options)
-            )
+            raise ValueError(f"Unknown compile_option {name!r}, expected one of {known_options!r}")
 
     def check_compile_option(self, name, value):
         """
@@ -109,10 +107,7 @@ class SimulatorFactory(object):
         or the first available
         """
         available_simulators = self._detect_available_simulators()
-        name_mapping = {
-            simulator_class.name: simulator_class
-            for simulator_class in self.supported_simulators()
-        }
+        name_mapping = {simulator_class.name: simulator_class for simulator_class in self.supported_simulators()}
         if not available_simulators:
             return None
 
@@ -122,9 +117,7 @@ class SimulatorFactory(object):
             if simulator_name not in name_mapping:
                 raise RuntimeError(
                     (
-                        "Simulator from "
-                        + environ_name
-                        + " environment variable %r is not supported. "
+                        "Simulator from " + environ_name + " environment variable %r is not supported. "
                         "Supported simulators are %r"
                     )
                     % (simulator_name, name_mapping.keys())
@@ -159,11 +152,7 @@ class SimulatorFactory(object):
         """
         Detect available simulators and return a list
         """
-        return [
-            simulator_class
-            for simulator_class in self.supported_simulators()
-            if simulator_class.is_available()
-        ]
+        return [simulator_class for simulator_class in self.supported_simulators() if simulator_class.is_available()]
 
     @property
     def has_simulator(self):

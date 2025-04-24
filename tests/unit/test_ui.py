@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2014-2021, Lars Asplund lars.anders.asplund@gmail.com
+# Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 #
 # pylint: disable=too-many-public-methods, too-many-lines
 
@@ -26,6 +26,7 @@ from vunit.ostools import renew_path
 from vunit.builtins import add_verilog_include_dir
 from vunit.sim_if import SimulatorInterface
 from vunit.vhdl_standard import VHDL
+from vunit.ui.preprocessor import Preprocessor
 
 
 class TestUi(unittest.TestCase):
@@ -150,17 +151,50 @@ begin
 end architecture;
 """
         )
-        self.assertFalse(
-            (Path(self._preprocessed_path) / "lib" / Path(file_name1).name).exists()
-        )
-        with (
-            Path(self._preprocessed_path) / "lib" / Path(file_name2).name
-        ).open() as fread:
+        self.assertFalse((Path(self._preprocessed_path) / "lib" / Path(file_name1).name).exists())
+        with (Path(self._preprocessed_path) / "lib" / Path(file_name2).name).open() as fread:
             expectd = pp_source.substitute(
                 entity="ent2",
                 report='log("Here I am!"); -- VUnitfier preprocessor: Report turned off, keeping original code.',
             )
             self.assertEqual(fread.read(), expectd)
+
+    def test_that_application_order_of_preprocessors_can_be_controlled(self):
+        ui = self._create_ui()
+        ui.add_library("lib")
+        ui.add_preprocessor(TestPreprocessor2(order=1))
+        ui.enable_location_preprocessing(order=-1)
+        ui.enable_check_preprocessing(order=-2)
+        ui.add_preprocessor(TestPreprocessor())
+
+        entity_file = Path(self.create_entity_file())
+        ui.add_source_files(str(entity_file), "lib")
+
+        pp_source = Template(
+            """\
+-- TestPreprocessor2
+-- check_relation(a = b);
+
+library vunit_lib;
+context vunit_lib.vunit_context;
+
+entity $entity is
+end entity;
+
+architecture arch of $entity is
+begin
+    log("Hello World", line_num => 10, file_name => "$file");
+    check_relation(1 /= 2, context_msg => "Expected 1 /= 2. Left is \
+" & to_string(1) & ". Right is " & to_string(2) & ".", line_num => 11, file_name => "$file");
+    report "Here I am!";
+end architecture;
+"""
+        )
+        with (Path(self._preprocessed_path) / "lib" / entity_file.name).open() as fread:
+            self.assertEqual(
+                fread.read(),
+                pp_source.substitute(entity="ent0", file=entity_file.name),
+            )
 
     @mock.patch("vunit.ui.LOGGER.error", autospec=True)
     def test_recovers_from_preprocessing_error(self, logger):
@@ -190,12 +224,8 @@ end architecture;
         self.create_file(str(file_name), contents)
 
         ui.add_source_file(file_name, "lib")
-        logger.assert_called_once_with(
-            "Failed to preprocess %s", str(Path(file_name).resolve())
-        )
-        self.assertFalse(
-            (Path(self._preprocessed_path) / "lib" / file_name.name).exists()
-        )
+        logger.assert_called_once_with("Failed to preprocess %s", str(Path(file_name).resolve()))
+        self.assertFalse((Path(self._preprocessed_path) / "lib" / file_name.name).exists())
 
     def test_supported_source_file_suffixes(self):
         """Test adding a supported filetype, of any case, is accepted."""
@@ -205,9 +235,7 @@ end architecture;
         allowable_extensions = list(accepted_extensions)
         allowable_extensions.extend([ext.upper() for ext in accepted_extensions])
         allowable_extensions.append(
-            VHDL_EXTENSIONS[0][0]
-            + VHDL_EXTENSIONS[0][1].upper()
-            + VHDL_EXTENSIONS[0][2:]
+            VHDL_EXTENSIONS[0][0] + VHDL_EXTENSIONS[0][1].upper() + VHDL_EXTENSIONS[0][2:]
         )  # mixed case
         for idx, ext in enumerate(allowable_extensions):
             file_name = self.create_entity_file(idx, ext)
@@ -241,13 +269,9 @@ end architecture;
     def test_no_exception_on_adding_zero_files_when_allowed(self):
         ui = self._create_ui()
         lib = ui.add_library("lib")
-        lib.add_source_files(
-            str(Path(__file__).parent / "missing.vhd"), allow_empty=True
-        )
+        lib.add_source_files(str(Path(__file__).parent / "missing.vhd"), allow_empty=True)
 
     def test_get_test_benchs_and_test(self):
-        ui = self._create_ui()
-        lib = ui.add_library("lib")
         self.create_file(
             "tb_ent.vhd",
             """
@@ -280,34 +304,79 @@ end architecture;
         """,
         )
 
+        self.create_file(
+            "tb_ent3.vhd",
+            """
+entity tb_ent3 is
+  generic (runner_cfg : string);
+end entity;
+
+architecture a of tb_ent3 is
+begin
+end architecture;
+        """,
+        )
+
         ui = self._create_ui()
-        lib = ui.add_library("lib")
-        lib.add_source_file("tb_ent.vhd")
-        lib.add_source_file("tb_ent2.vhd")
-        self.assertEqual(lib.test_bench("tb_ent").name, "tb_ent")
-        self.assertEqual(lib.test_bench("tb_ent2").name, "tb_ent2")
-        self.assertEqual(lib.test_bench("tb_ent").library.name, "lib")
+        lib1 = ui.add_library("lib1")
+        lib2 = ui.add_library("lib2")
+        lib1.add_source_file("tb_ent.vhd")
+        lib1.add_source_file("tb_ent2.vhd")
+        lib2.add_source_file("tb_ent3.vhd")
+        self.assertEqual(lib1.test_bench("tb_ent").name, "tb_ent")
+        self.assertEqual(lib1.test_bench("tb_ent2").name, "tb_ent2")
+        self.assertEqual(lib1.test_bench("tb_ent").library.name, "lib1")
 
         self.assertEqual(
-            [test_bench.name for test_bench in lib.get_test_benches()],
+            [test_bench.name for test_bench in lib1.get_test_benches()],
             ["tb_ent", "tb_ent2"],
         )
+        self.assertEqual([test_bench.name for test_bench in lib1.get_test_benches("*2")], ["tb_ent2"])
+
+        libs = ui.get_libraries("lib*")
         self.assertEqual(
-            [test_bench.name for test_bench in lib.get_test_benches("*2")], ["tb_ent2"]
+            [test_bench.name for test_bench in libs.get_test_benches()],
+            ["tb_ent", "tb_ent2", "tb_ent3"],
         )
+        self.assertEqual([test_bench.name for test_bench in libs.get_test_benches("*3")], ["tb_ent3"])
 
-        self.assertEqual(lib.test_bench("tb_ent").test("test1").name, "test1")
-        self.assertEqual(lib.test_bench("tb_ent").test("test2").name, "test2")
+        self.assertEqual(lib1.test_bench("tb_ent").test("test1").name, "test1")
+        self.assertEqual(lib1.test_bench("tb_ent").test("test2").name, "test2")
 
         self.assertEqual(
-            [test.name for test in lib.test_bench("tb_ent").get_tests()],
+            [test.name for test in lib1.test_bench("tb_ent").get_tests()],
             ["test1", "test2"],
         )
-        self.assertEqual(
-            [test.name for test in lib.test_bench("tb_ent").get_tests("*1")], ["test1"]
+        self.assertEqual([test.name for test in lib1.test_bench("tb_ent").get_tests("*1")], ["test1"])
+        self.assertEqual([test.name for test in lib1.test_bench("tb_ent2").get_tests()], [])
+
+    def test_get_test_bench_with_explicit_constant_runner_cfg(self):
+        self.create_file(
+            "tb_ent.vhd",
+            """
+entity tb_ent is
+  generic (constant runner_cfg : in string);
+end entity;
+
+architecture a of tb_ent is
+begin
+  main : process
+  begin
+    if run("test1") then
+    elsif run("test2") then
+    end if;
+  end process;
+end architecture;
+        """,
         )
+
+        ui = self._create_ui()
+        lib1 = ui.add_library("lib1")
+        lib1.add_source_file("tb_ent.vhd")
+        self.assertEqual(lib1.test_bench("tb_ent").name, "tb_ent")
         self.assertEqual(
-            [test.name for test in lib.test_bench("tb_ent2").get_tests()], []
+            [test.name for test in lib1.test_bench("tb_ent").get_tests()],
+            ["test1", "test2"],
         )
 
     def test_get_entities_case_insensitive(self):
@@ -400,9 +469,7 @@ end entity;
         ui = self._create_ui()
 
         source_files = ui.add_source_files_from_csv("test_returns.csv")
-        self.assertEqual(
-            [source_file.name for source_file in source_files], list_of_files
-        )
+        self.assertEqual([source_file.name for source_file in source_files], list_of_files)
 
     def test_add_source_files_errors(self):
         ui = self._create_ui()
@@ -414,9 +481,7 @@ end entity;
             lib.add_source_files,
             ["missing.vhd", "file.vhd"],
         )
-        self.assertRaisesRegex(
-            ValueError, r"missing\.vhd", lib.add_source_files, "missing.vhd"
-        )
+        self.assertRaisesRegex(ValueError, r"missing\.vhd", lib.add_source_files, "missing.vhd")
 
     def test_get_source_files(self):
         ui = self._create_ui()
@@ -429,11 +494,47 @@ end entity;
         self.assertEqual(len(ui.get_source_files(file_name)), 2)
         self.assertEqual(len(lib1.get_source_files(file_name)), 1)
         self.assertEqual(len(lib2.get_source_files(file_name)), 1)
+        self.assertEqual(len(ui.get_libraries("lib*").get_source_files(file_name)), 2)
+        self.assertEqual(len(ui.get_libraries("lib2").get_source_files(file_name)), 1)
 
         ui.get_source_file(file_name, library_name="lib1")
         ui.get_source_file(file_name, library_name="lib2")
         lib1.get_source_file(file_name)
         lib2.get_source_file(file_name)
+
+    def test_get_libraries(self):
+        ui = self._create_ui()
+
+        libs = ui.get_libraries()
+        self.assertEqual(len(libs), 1)
+        self.assertEqual(libs[0].name, "vunit_lib")
+
+        ui.add_library("lib1")
+        ui.add_library("lib2")
+
+        self.assertEqual(len(ui.get_libraries()), 3)
+        self.assertEqual(len(ui.get_libraries("lib*")), 2)
+        libs = ui.get_libraries("lib1")
+        self.assertEqual(len(libs), 1)
+        self.assertEqual(libs[0].name, "lib1")
+        libs = ui.get_libraries("*2")
+        self.assertEqual(len(libs), 1)
+        self.assertEqual(libs[0].name, "lib2")
+
+    def test_get_libraries_errors(self):
+        ui = self._create_ui()
+        ui.add_library("lib1")
+        ui.add_library("lib2")
+        non_existant_name = "non_existant"
+
+        self.assertRaisesRegex(
+            ValueError,
+            f".*{non_existant_name}.*allow_empty.*",
+            ui.get_libraries,
+            non_existant_name,
+        )
+
+        self.assertEqual(len(ui.get_libraries(non_existant_name, allow_empty=True)), 0)
 
     def test_get_compile_order_smoke_test(self):
         ui = self._create_ui()
@@ -526,35 +627,25 @@ Listed 2 files""".splitlines()
 
         ui = self._create_ui("--list", "--with-attribute=.attr0")
         setup(ui)
-        check_stdout(
-            ui, "lib.tb_filter.Test 1\n" "lib.tb_filter.Test 2\n" "Listed 2 tests"
-        )
+        check_stdout(ui, "lib.tb_filter.Test 1\n" "lib.tb_filter.Test 2\n" "Listed 2 tests")
 
         ui = self._create_ui("--list", "--with-attribute=.attr2")
         setup(ui)
         check_stdout(ui, "lib.tb_filter.Test 4\n" "Listed 1 tests")
 
-        ui = self._create_ui(
-            "--list", "--with-attributes", ".attr0", "--with-attributes", ".attr1"
-        )
+        ui = self._create_ui("--list", "--with-attributes", ".attr0", "--with-attributes", ".attr1")
         setup(ui)
         check_stdout(ui, "lib.tb_filter.Test 2\n" "Listed 1 tests")
 
         ui = self._create_ui("--list", "--without-attributes", ".attr0")
         setup(ui)
-        check_stdout(
-            ui, "lib.tb_filter.Test 3\n" "lib.tb_filter.Test 4\n" "Listed 2 tests"
-        )
+        check_stdout(ui, "lib.tb_filter.Test 3\n" "lib.tb_filter.Test 4\n" "Listed 2 tests")
 
-        ui = self._create_ui(
-            "--list", "--without-attributes", ".attr0", "--without-attributes", ".attr1"
-        )
+        ui = self._create_ui("--list", "--without-attributes", ".attr0", "--without-attributes", ".attr1")
         setup(ui)
         check_stdout(ui, "lib.tb_filter.Test 4\n" "Listed 1 tests")
 
-        ui = self._create_ui(
-            "--list", "--with-attributes", ".attr0", "--without-attributes", ".attr1"
-        )
+        ui = self._create_ui("--list", "--with-attributes", ".attr0", "--without-attributes", ".attr1")
         setup(ui)
         check_stdout(ui, "lib.tb_filter.Test 1\n" "Listed 1 tests")
 
@@ -583,21 +674,15 @@ Listed 2 files""".splitlines()
 
         self._run_main(ui)
 
-        with open(json_file, "r") as fptr:
+        with Path(json_file).open("r") as fptr:
             data = json.load(fptr)
 
         # Check known keys
-        self.assertEqual(
-            set(data.keys()), set(["export_format_version", "files", "tests"])
-        )
+        self.assertEqual(set(data.keys()), set(["export_format_version", "files", "tests"]))
 
         # Check that export format is semantic version with integer values
-        self.assertEqual(
-            set(data["export_format_version"].keys()), set(("major", "minor", "patch"))
-        )
-        assert all(
-            isinstance(value, int) for value in data["export_format_version"].values()
-        )
+        self.assertEqual(set(data["export_format_version"].keys()), set(("major", "minor", "patch")))
+        assert all(isinstance(value, int) for value in data["export_format_version"].values())
 
         # Check the contents of the files section
         self.assertEqual(
@@ -612,10 +697,7 @@ Listed 2 files""".splitlines()
 
         # Check the contents of the tests section
         self.assertEqual(
-            {
-                item["name"]: (item["location"], item["attributes"])
-                for item in data["tests"]
-            },
+            {item["name"]: (item["location"], item["attributes"]) for item in data["tests"]},
             {
                 "lib1.tb_foo.all": (
                     {"file_name": file_name1, "offset": 180, "length": 18},
@@ -660,9 +742,7 @@ Listed 2 files""".splitlines()
             ui.get_source_files,
             non_existant_name,
         )
-        self.assertEqual(
-            len(ui.get_source_files(non_existant_name, allow_empty=True)), 0
-        )
+        self.assertEqual(len(ui.get_source_files(non_existant_name, allow_empty=True)), 0)
 
         self.assertRaisesRegex(
             ValueError,
@@ -733,9 +813,7 @@ Listed 2 files""".splitlines()
         foo_files.add_dependency_on(bar_file)
 
         for foo_file in foo_files:
-            self.assertEqual(
-                names(ui.get_compile_order([foo_file])), names([bar_file, foo_file])
-            )
+            self.assertEqual(names(ui.get_compile_order([foo_file])), names([bar_file, foo_file]))
 
     def _create_ui_with_mocked_project_add_source_file(self):
         """
@@ -773,16 +851,8 @@ Listed 2 files""".splitlines()
                 no_parse=False,
             )
 
-        check(
-            lambda ui, _: ui.add_source_files(
-                file_name, "lib", include_dirs=include_dirs
-            )
-        )
-        check(
-            lambda ui, _: ui.add_source_file(
-                file_name, "lib", include_dirs=include_dirs
-            )
-        )
+        check(lambda ui, _: ui.add_source_files(file_name, "lib", include_dirs=include_dirs))
+        check(lambda ui, _: ui.add_source_file(file_name, "lib", include_dirs=include_dirs))
         check(lambda _, lib: lib.add_source_files(file_name, include_dirs=include_dirs))
         check(lambda _, lib: lib.add_source_file(file_name, include_dirs=include_dirs))
 
@@ -854,7 +924,7 @@ Listed 2 files""".splitlines()
         source_file = lib.add_source_file(file_name)
 
         # Use methods on all types of interface objects
-        for obj in [source_file, ui, lib, lib.get_source_files(file_name)]:
+        for obj in [source_file, ui, lib, lib.get_source_files(file_name), ui.get_libraries("lib")]:
             obj.set_compile_option("ghdl.flags", [])
             self.assertEqual(source_file.get_compile_option("ghdl.flags"), [])
 
@@ -915,9 +985,7 @@ Listed 2 files""".splitlines()
             elif method == 2:
                 source_file = ui.add_source_file(file_name, "lib", vhdl_standard="2008")
             elif method == 3:
-                source_file = ui.add_source_files(
-                    file_name, "lib", vhdl_standard="2008"
-                )[0]
+                source_file = ui.add_source_files(file_name, "lib", vhdl_standard="2008")[0]
 
             self.assertEqual(source_file.vhdl_standard, "2008")
 
@@ -1077,10 +1145,7 @@ endmodule
                 test_bench.scan_tests_from_file(tests_file_name)
 
                 self.assertEqual(
-                    [
-                        test.name
-                        for test in ui.library("lib").test_bench("tb_top").get_tests()
-                    ],
+                    [test.name for test in ui.library("lib").test_bench("tb_top").get_tests()],
                     ["test1", "test2"],
                 )
 
@@ -1101,9 +1166,7 @@ endmodule
         """,
         )
         lib.add_source_file(tb_file_name)
-        self.assertRaises(
-            ValueError, lib.test_bench("tb_top").scan_tests_from_file, "missing.sv"
-        )
+        self.assertRaises(ValueError, lib.test_bench("tb_top").scan_tests_from_file, "missing.sv")
 
     def test_can_list_tests_without_simulator(self):
         with set_env():
@@ -1121,9 +1184,7 @@ endmodule
             ui = self._create_ui_real_sim("--compile")
             self._run_main(ui, 1)
             self.assertEqual(len(logger.error.mock_calls), 1)
-            self.assertTrue(
-                "No available simulator detected" in str(logger.error.mock_calls)
-            )
+            self.assertTrue("No available simulator detected" in str(logger.error.mock_calls))
 
     @mock.patch("vunit.ui.LOGGER", autospec=True)
     def test_simulate_without_simulator_fails(self, logger):
@@ -1131,9 +1192,7 @@ endmodule
             ui = self._create_ui_real_sim()
             self._run_main(ui, 1)
             self.assertEqual(len(logger.error.mock_calls), 1)
-            self.assertTrue(
-                "No available simulator detected" in str(logger.error.mock_calls)
-            )
+            self.assertTrue("No available simulator detected" in str(logger.error.mock_calls))
 
     def test_set_sim_option_before_adding_file(self):
         """
@@ -1141,13 +1200,16 @@ endmodule
         """
         ui = self._create_ui()
         lib = ui.add_library("lib")
-        for method in (lib.set_sim_option, ui.set_sim_option):
+        libs = ui.get_libraries("lib")
+        for method in (lib.set_sim_option, ui.set_sim_option, libs.set_sim_option):
             method("disable_ieee_warnings", True, allow_empty=True)
             self.assertRaises(ValueError, method, "disable_ieee_warnings", True)
 
         for method in (
             lib.set_compile_option,
             lib.add_compile_option,
+            libs.set_compile_option,
+            libs.add_compile_option,
             ui.set_compile_option,
             ui.add_compile_option,
         ):
@@ -1193,9 +1255,7 @@ end architecture;
         lib.add_source_file("tb_ent.vhd")
         lib.add_source_file("tb_ent2.vhd")
         simulator_if = ui._create_simulator_if()  # pylint: disable=protected-access
-        target_files = ui._get_testbench_files(  # pylint: disable=protected-access
-            simulator_if
-        )
+        target_files = ui._get_testbench_files(simulator_if)  # pylint: disable=protected-access
         expected = [
             lib.get_source_file(fname)._source_file  # pylint: disable=protected-access
             for fname in ["tb_ent2.vhd", "tb_ent.vhd"]
@@ -1265,7 +1325,9 @@ end architecture;
         """
         Creata file in the temporary path with given contents
         """
-        with open(file_name, "w") as fptr:
+        if not isinstance(file_name, Path):
+            file_name = Path(file_name)
+        with file_name.open("w") as fptr:
             fptr.write(contents)
 
     @staticmethod
@@ -1273,13 +1335,15 @@ end architecture;
         """
         Create a temporary csv description file with given contents
         """
-        with open(file_name, "w") as fprt:
+        if not isinstance(file_name, Path):
+            file_name = Path(file_name)
+        with file_name.open("w") as fprt:
             fprt.write(contents)
 
 
 class TestPreprocessor(object):
     """
-    A preprocessor that appends a check_relation call before the orginal code
+    A preprocessor that adds a check_relation call before the orginal code
     """
 
     def __init__(self):
@@ -1290,15 +1354,26 @@ class TestPreprocessor(object):
         return "-- check_relation(a = b);\n" + code
 
 
+class TestPreprocessor2(Preprocessor):
+    """
+    A preprocessor that adds a comment before the orginal code
+    """
+
+    def __init__(self, order):
+        super().__init__(order)
+
+    @staticmethod
+    def run(code, file_name):  # pylint: disable=unused-argument
+        return "-- TestPreprocessor2\n" + code
+
+
 class VUnitfier(object):
     """
     A preprocessor that replaces report statments with log calls
     """
 
     def __init__(self):
-        self._report_pattern = re.compile(
-            r'^(?P<indent>\s*)report\s*(?P<note>"[^"]*")\s*;', MULTILINE
-        )
+        self._report_pattern = re.compile(r'^(?P<indent>\s*)report\s*(?P<note>"[^"]*")\s*;', MULTILINE)
 
     def run(self, code, file_name):  # pylint: disable=unused-argument
         return self._report_pattern.sub(
@@ -1337,9 +1412,7 @@ class MockSimulator(SimulatorInterface):
         return True
 
     @staticmethod
-    def simulate(  # pylint: disable=unused-argument
-        output_path, test_suite_name, config, elaborate_only
-    ):
+    def simulate(output_path, test_suite_name, config, elaborate_only):  # pylint: disable=unused-argument
         return True
 
 

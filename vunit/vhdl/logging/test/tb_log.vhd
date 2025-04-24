@@ -2,7 +2,7 @@
 -- License, v. 2.0. If a copy of the MPL was not distributed with this file,
 -- You can obtain one at http://mozilla.org/MPL/2.0/.
 --
--- Copyright (c) 2014-2021, Lars Asplund lars.anders.asplund@gmail.com
+-- Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 
 use std.textio.all;
 
@@ -16,6 +16,7 @@ use work.log_handler_pkg.all;
 use work.core_pkg.all;
 use work.test_support_pkg.all;
 use work.print_pkg.all;
+use work.id_pkg.all;
 
 entity tb_log is
   generic (
@@ -59,8 +60,8 @@ begin
       if status = open_ok then
         for i in 0 to num_keys(entries)-1 loop
           readline(fptr, l);
-          assert l.all = get(entries, integer'image(i))
-            report "(" & integer'image(i) & ") " & LF & "Got:" & LF & l.all & LF & "expected:" & LF & get(entries, integer'image(i))
+          assert l.all = get_string(entries, integer'image(i))
+            report "(" & integer'image(i) & ") " & LF & "Got:" & LF & l.all & LF & "expected:" & LF & get_string(entries, integer'image(i))
             severity failure;
         end loop;
       end if;
@@ -149,12 +150,12 @@ begin
       disable_stop(logger, error);
       disable_stop(logger, failure);
       perform_logging(logger);
-      set(entries, "0", "message 1");
-      set(entries, "1", "message 2");
-      set(entries, "2", "message 3");
-      set(entries, "3", "message 4");
-      set(entries, "4", "message 5");
-      set(entries, "5", "message 6");
+      set_string(entries, "0", "message 1");
+      set_string(entries, "1", "message 2");
+      set_string(entries, "2", "message 3");
+      set_string(entries, "3", "message 4");
+      set_string(entries, "4", "message 5");
+      set_string(entries, "5", "message 6");
 
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(logger, error);
@@ -175,13 +176,13 @@ begin
       print("message 3", fptr);
       file_close(fptr);
 
-      set(entries, "0", "message 1");
-      set(entries, "1", "message 2");
-      set(entries, "2", "message 3");
+      set_string(entries, "0", "message 1");
+      set_string(entries, "1", "message 2");
+      set_string(entries, "2", "message 3");
       check_file(print_file_name, entries);
 
       print("message 6", print_file_name, write_mode);
-      set(entries2, "0", "message 6");
+      set_string(entries2, "0", "message 6");
       check_file(print_file_name, entries2);
 
     elsif run("Can use 'instance_name") then
@@ -209,12 +210,12 @@ begin
       disable_stop(logger, error);
       disable_stop(logger, failure);
       perform_logging(logger);
-      set(entries, "0", "  TRACE - message 1");
-      set(entries, "1", "  DEBUG - message 2");
-      set(entries, "2", "   INFO - message 3");
-      set(entries, "3", "WARNING - message 4");
-      set(entries, "4", "  ERROR - message 5");
-      set(entries, "5", "FAILURE - message 6");
+      set_string(entries, "0", "  TRACE - message 1");
+      set_string(entries, "1", "  DEBUG - message 2");
+      set_string(entries, "2", "   INFO - message 3");
+      set_string(entries, "3", "WARNING - message 4");
+      set_string(entries, "4", "  ERROR - message 5");
+      set_string(entries, "5", "FAILURE - message 6");
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(logger, error);
       reset_log_count(logger, failure);
@@ -223,9 +224,9 @@ begin
       set_format(display_handler, format => level);
       init_log_handler(file_handler, file_name => log_file_name, format => level);
       info(logger, "hello" & LF & "world" & LF & "    !");
-      set(entries, "0", "   INFO - hello");
-      set(entries, "1", "          world");
-      set(entries, "2", "              !");
+      set_string(entries, "0", "   INFO - hello");
+      set_string(entries, "1", "          world");
+      set_string(entries, "2", "              !");
       check_log_file(file_handler, log_file_name, entries);
 
     elsif run("csv format") then
@@ -236,8 +237,8 @@ begin
       tmp := get_log_count;
       warning(nested_logger, "msg1");
       info(logger, "msg2", file_name => "file_name.vhd", line_num => 11);
-      set(entries, "0", integer'image(tmp+0) & "," & time'image(3 ns) & ",WARNING,,,logger:nested,msg1");
-      set(entries, "1", integer'image(tmp+1) & "," & time'image(3 ns) & ",INFO,file_name.vhd,11,logger,msg2");
+      set_string(entries, "0", integer'image(tmp+0) & "," & time'image(3 ns) & ",WARNING,,,logger:nested,msg1");
+      set_string(entries, "1", integer'image(tmp+1) & "," & time'image(3 ns) & ",INFO,file_name.vhd,11,logger,msg2");
       check_log_file(file_handler, log_file_name, entries);
 
     elsif run("verbose format") then
@@ -246,12 +247,12 @@ begin
       disable_stop(logger, error);
       disable_stop(logger, failure);
       perform_logging(logger);
-      set(entries, "0", format_time(0 ns) & " - logger               -   TRACE - message 1");
-      set(entries, "1", format_time(1 ns) & " - logger               -   DEBUG - message 2");
-      set(entries, "2", format_time(2 ns) & " - logger               -    INFO - message 3");
-      set(entries, "3", format_time(3 ns) & " - logger               - WARNING - message 4");
-      set(entries, "4", format_time(4 ns) & " - logger               -   ERROR - message 5");
-      set(entries, "5", format_time(5 ns) & " - logger               - FAILURE - message 6");
+      set_string(entries, "0", format_time(0 ns) & " - logger               -   TRACE - message 1");
+      set_string(entries, "1", format_time(1 ns) & " - logger               -   DEBUG - message 2");
+      set_string(entries, "2", format_time(2 ns) & " - logger               -    INFO - message 3");
+      set_string(entries, "3", format_time(3 ns) & " - logger               - WARNING - message 4");
+      set_string(entries, "4", format_time(4 ns) & " - logger               -   ERROR - message 5");
+      set_string(entries, "5", format_time(5 ns) & " - logger               - FAILURE - message 6");
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(logger, error);
       reset_log_count(logger, failure);
@@ -261,18 +262,18 @@ begin
       init_log_handler(file_handler, file_name => log_file_name, format => verbose);
       info(logger, "message", file_name => "tb_log.vhd", line_num => 188);
       info(logger, "hello" & LF & "world", file_name => "tb_log.vhd", line_num => 189);
-      set(entries, "0", format_time(0 ns) & " - logger               -    INFO - message (tb_log.vhd:188)");
-      set(entries, "1", format_time(0 ns) & " - logger               -    INFO - hello (tb_log.vhd:189)");
-      set(entries, "2", time_padding      & "                                    world");
+      set_string(entries, "0", format_time(0 ns) & " - logger               -    INFO - message (tb_log.vhd:188)");
+      set_string(entries, "1", format_time(0 ns) & " - logger               -    INFO - hello (tb_log.vhd:189)");
+      set_string(entries, "2", time_padding      & "                                    world");
       check_log_file(file_handler, log_file_name, entries);
 
     elsif run("verbose format aligns multi line logs") then
       set_format(display_handler, format => verbose);
       init_log_handler(file_handler, file_name => log_file_name, format => verbose);
       info(logger, "hello" & LF & "world" & LF & "    !");
-      set(entries, "0", format_time(0 ns) & " - logger               -    INFO - hello");
-      set(entries, "1", time_padding      & "                                    world");
-      set(entries, "2", time_padding      & "                                        !");
+      set_string(entries, "0", format_time(0 ns) & " - logger               -    INFO - hello");
+      set_string(entries, "1", time_padding      & "                                    world");
+      set_string(entries, "2", time_padding      & "                                        !");
       check_log_file(file_handler, log_file_name, entries);
 
     elsif run("hierarchical format") then
@@ -281,12 +282,12 @@ begin
       disable_stop(nested_logger, error);
       disable_stop(nested_logger, failure);
       perform_logging(nested_logger);
-      set(entries, "0", format_time(0 ns) & " - logger:nested        -   TRACE - message 1");
-      set(entries, "1", format_time(1 ns) & " - logger:nested        -   DEBUG - message 2");
-      set(entries, "2", format_time(2 ns) & " - logger:nested        -    INFO - message 3");
-      set(entries, "3", format_time(3 ns) & " - logger:nested        - WARNING - message 4");
-      set(entries, "4", format_time(4 ns) & " - logger:nested        -   ERROR - message 5");
-      set(entries, "5", format_time(5 ns) & " - logger:nested        - FAILURE - message 6");
+      set_string(entries, "0", format_time(0 ns) & " - logger:nested        -   TRACE - message 1");
+      set_string(entries, "1", format_time(1 ns) & " - logger:nested        -   DEBUG - message 2");
+      set_string(entries, "2", format_time(2 ns) & " - logger:nested        -    INFO - message 3");
+      set_string(entries, "3", format_time(3 ns) & " - logger:nested        - WARNING - message 4");
+      set_string(entries, "4", format_time(4 ns) & " - logger:nested        -   ERROR - message 5");
+      set_string(entries, "5", format_time(5 ns) & " - logger:nested        - FAILURE - message 6");
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(nested_logger, error);
       reset_log_count(nested_logger, failure);
@@ -308,12 +309,12 @@ begin
       wait for 1 ns;
       failure("message 6");
 
-      set(entries, "0", "  DEBUG - message 1");
-      set(entries, "1", "  TRACE - message 2");
-      set(entries, "2", "   INFO - message 3");
-      set(entries, "3", "WARNING - message 4");
-      set(entries, "4", "  ERROR - message 5");
-      set(entries, "5", "FAILURE - message 6");
+      set_string(entries, "0", "  DEBUG - message 1");
+      set_string(entries, "1", "  TRACE - message 2");
+      set_string(entries, "2", "   INFO - message 3");
+      set_string(entries, "3", "WARNING - message 4");
+      set_string(entries, "4", "  ERROR - message 5");
+      set_string(entries, "5", "FAILURE - message 6");
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(default_logger, error);
       reset_log_count(default_logger, failure);
@@ -341,12 +342,12 @@ begin
       end loop;
 
       perform_logging(logger);
-      set(entries, "0", "  TRACE - message 1");
-      set(entries, "1", "  DEBUG - message 2");
-      set(entries, "2", "   INFO - message 3");
-      set(entries, "3", "WARNING - message 4");
-      set(entries, "4", "  ERROR - message 5");
-      set(entries, "5", "FAILURE - message 6");
+      set_string(entries, "0", "  TRACE - message 1");
+      set_string(entries, "1", "  DEBUG - message 2");
+      set_string(entries, "2", "   INFO - message 3");
+      set_string(entries, "3", "WARNING - message 4");
+      set_string(entries, "4", "  ERROR - message 5");
+      set_string(entries, "5", "FAILURE - message 6");
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(logger, error);
       reset_log_count(logger, failure);
@@ -358,9 +359,9 @@ begin
       disable_stop(root_logger, error);
       disable_stop(root_logger, failure);
       perform_logging(logger);
-      set(entries, "0", "WARNING - message 4");
-      set(entries, "1", "  ERROR - message 5");
-      set(entries, "2", "FAILURE - message 6");
+      set_string(entries, "0", "WARNING - message 4");
+      set_string(entries, "1", "  ERROR - message 5");
+      set_string(entries, "2", "FAILURE - message 6");
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(logger, error);
       reset_log_count(logger, failure);
@@ -371,7 +372,7 @@ begin
       disable_stop(root_logger, error);
       disable_stop(root_logger, failure);
       perform_logging(logger);
-      set(entries, "0", "WARNING - message 4");
+      set_string(entries, "0", "WARNING - message 4");
       check_log_file(file_handler, log_file_name, entries);
       reset_log_count(logger, error);
       reset_log_count(logger, failure);
@@ -383,7 +384,7 @@ begin
       info(logger, "message 1");
       info(nested_logger, "message 2");
       info("message 3");
-      set(entries, "0", "   INFO - message 3");
+      set_string(entries, "0", "   INFO - message 3");
       check_log_file(file_handler, log_file_name, entries);
 
     elsif run("can show and hide source") then
@@ -399,7 +400,7 @@ begin
       info(logger, "message");
       info(nested_logger, "message");
       info("message");
-      set(entries, "0", "   INFO - message");
+      set_string(entries, "0", "   INFO - message");
       check_log_file(file_handler, log_file_name, entries);
 
       init_log_handler(file_handler, file_name => log_file_name, format => level);
@@ -413,9 +414,9 @@ begin
       info(logger, "message 1");
       info(nested_logger, "message 2");
       info("message 3");
-      set(entries, "0", "   INFO - message 1");
-      set(entries, "1", "   INFO - message 2");
-      set(entries, "2", "   INFO - message 3");
+      set_string(entries, "0", "   INFO - message 1");
+      set_string(entries, "1", "   INFO - message 2");
+      set_string(entries, "2", "   INFO - message 3");
       check_log_file(file_handler, log_file_name, entries);
 
     elsif run("mock and unmock") then
@@ -586,7 +587,7 @@ begin
         assert_false(has_stop_count(tmp_logger, log_level));
       end loop;
 
-    elsif run("Get logger") then
+    elsif run("Get logger by name") then
       tmp_logger := get_logger("logger:child");
       assert_equal(get_name(tmp_logger), "child");
       assert_equal(get_full_name(tmp_logger), "logger:child");
@@ -603,6 +604,34 @@ begin
 
       tmp_logger := get_logger("nested", parent => logger);
       assert_true(tmp_logger = nested_logger);
+
+    elsif run("Get logger by id") then
+      tmp_logger := get_logger(get_id("logger:child"));
+      assert_equal(get_name(tmp_logger), "child");
+      assert_equal(get_full_name(tmp_logger), "logger:child");
+
+      tmp_logger := get_logger(get_id("logger:child:grandchild"));
+      assert_equal(get_name(tmp_logger), "grandchild");
+      assert_equal(get_full_name(tmp_logger), "logger:child:grandchild");
+
+      tmp_logger := get_logger(get_id("default"));
+      assert_true(tmp_logger = default_logger);
+
+      tmp_logger := get_logger(get_id("logger:nested"));
+      assert_true(tmp_logger = nested_logger);
+
+      tmp_logger := get_logger(get_id("nested", parent => get_id(logger)));
+      assert_true(tmp_logger = nested_logger);
+
+    elsif run("Test has_logger") then
+      tmp_logger := get_logger("parent:child");
+      assert_true(has_logger(get_id("parent:child")));
+      assert_true(has_logger(get_id("parent")));
+
+      assert_false(has_logger(root_id));
+      assert_false(has_logger(get_id("id")));
+      assert_false(has_logger(get_id("parent:child2")));
+      assert_false(has_logger(get_id("parent:child:grandchild")));
 
     elsif run("Create hierarchical logger") then
       tmp_logger := get_logger("logger:child");
@@ -708,16 +737,19 @@ begin
 
       mock_core_failure;
       tmp_logger := get_logger("foo,bar");
-      check_core_failure("Invalid logger name ""foo,bar""");
+      check_core_failure("Invalid ID name ""foo,bar""");
 
       tmp_logger := get_logger("parent:foo,bar");
-      check_core_failure("Invalid logger name ""parent:foo,bar""");
+      check_core_failure("Invalid ID name ""parent:foo,bar""");
+
+      tmp_logger := get_logger("par,ent:foo");
+      check_core_failure("Invalid ID name ""par,ent""");
 
       tmp_logger := get_logger("");
-      check_core_failure("Invalid logger name """"");
+      check_core_failure("Invalid ID name """"");
 
       tmp_logger := get_logger(":");
-      check_core_failure("Invalid logger name """"");
+      check_core_failure("Invalid ID name """"");
 
       unmock_core_failure;
 
@@ -855,14 +887,14 @@ begin
     elsif run("Disabled log is not visible") then
       init_log_handler(file_handler, file_name => log_file_name, format => raw);
       warning(logger, "message");
-      set(entries, "0", "message");
+      set_string(entries, "0", "message");
       check_log_file(file_handler, log_file_name, entries);
 
       init_log_handler(file_handler, file_name => log_file_name, format => raw);
       disable(logger, warning);
       assert_false(is_visible(logger, warning));
       warning(logger, "message");
-      set(entries, "0", "message");
+      set_string(entries, "0", "message");
       check_empty_log_file(log_file_name);
 
    elsif run("many log files") then
@@ -884,9 +916,9 @@ begin
      end loop;
 
      for i in file_handlers'range loop
-       set(entries, "0", "a " & integer'image(i));
-       set(entries, "1", "b " & integer'image(i));
-       set(entries, "2", "c " & integer'image(i));
+       set_string(entries, "0", "a " & integer'image(i));
+       set_string(entries, "1", "b " & integer'image(i));
+       set_string(entries, "2", "c " & integer'image(i));
 
        check_log_file(file_handlers(i), log_file_name & integer'image(i), entries);
      end loop;

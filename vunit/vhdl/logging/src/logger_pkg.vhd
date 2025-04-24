@@ -2,11 +2,12 @@
 -- License, v. 2.0. If a copy of the MPL was not distributed with this file,
 -- You can obtain one at http://mozilla.org/MPL/2.0/.
 --
--- Copyright (c) 2014-2021, Lars Asplund lars.anders.asplund@gmail.com
+-- Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 
 use work.log_levels_pkg.all;
 use work.log_handler_pkg.all;
 use work.integer_vector_ptr_pkg.all;
+use work.id_pkg.all;
 
 package logger_pkg is
 
@@ -18,64 +19,83 @@ package logger_pkg is
   type logger_vec_t is array (natural range <>) of logger_t;
   impure function root_logger return logger_t;
 
-  -- Get a logger with name.
-  -- Can also optionally be relative to a parent logger
+  -- Get a logger with name. A new one is created if it doesn't
+  -- already exist. Can also optionally be relative to a parent logger.
+  -- If a new logger is created then a new identity with the name/parent
+  -- is also created.
   impure function get_logger(name : string;
                              parent : logger_t := null_logger) return logger_t;
+
+  -- Get logger by identity. Create a new identity and/or logger if they
+  -- don't already exist.
+  impure function get_logger(id : id_t) return logger_t;
+
+  -- Return true if logger with id already exists, false otherwise.
+  impure function has_logger(id : id_t) return boolean;
 
   -------------------------------------
   -- Log procedures for each log level
   -------------------------------------
   procedure trace(logger : logger_t;
                   msg : string;
+                  path_offset : natural := 0;
                   line_num : natural := 0;
                   file_name : string := "");
 
   procedure debug(logger : logger_t;
                   msg : string;
+                  path_offset : natural := 0;
                   line_num : natural := 0;
                   file_name : string := "");
 
   procedure pass(logger : logger_t;
                  msg : string;
+                 path_offset : natural := 0;
                  line_num : natural := 0;
                  file_name : string := "");
 
   procedure info(logger : logger_t;
                  msg : string;
+                 path_offset : natural := 0;
                  line_num : natural := 0;
                  file_name : string := "");
 
   procedure warning(logger : logger_t;
                     msg : string;
+                    path_offset : natural := 0;
                     line_num : natural := 0;
                     file_name : string := "");
 
   procedure error(logger : logger_t;
                   msg : string;
+                  path_offset : natural := 0;
                   line_num : natural := 0;
                   file_name : string := "");
 
   procedure failure(logger : logger_t;
                     msg : string;
+                    path_offset : natural := 0;
                     line_num : natural := 0;
                     file_name : string := "");
 
   procedure warning_if(logger : logger_t;
                        condition : boolean;
                        msg : string;
+                       path_offset : natural := 0;
                        line_num : natural := 0;
                        file_name : string := "");
 
   procedure error_if(logger : logger_t;
                      condition : boolean;
                      msg : string;
+                     path_offset : natural := 0;
                      line_num : natural := 0;
                      file_name : string := "");
 
   procedure failure_if(logger : logger_t;
                        condition : boolean;
                        msg : string;
+                       path_offset : natural := 0;
                        line_num : natural := 0;
                        file_name : string := "");
 
@@ -87,45 +107,55 @@ package logger_pkg is
   impure function default_logger return logger_t;
 
   procedure trace(msg : string;
+                  path_offset : natural := 0;
                   line_num : natural := 0;
                   file_name : string := "");
 
   procedure debug(msg : string;
+                  path_offset : natural := 0;
                   line_num : natural := 0;
                   file_name : string := "");
 
   procedure pass(msg : string;
+                 path_offset : natural := 0;
                  line_num : natural := 0;
                  file_name : string := "");
 
   procedure info(msg : string;
+                 path_offset : natural := 0;
                  line_num : natural := 0;
                  file_name : string := "");
 
   procedure warning(msg : string;
+                    path_offset : natural := 0;
                     line_num : natural := 0;
                     file_name : string := "");
 
   procedure error(msg : string;
+                  path_offset : natural := 0;
                   line_num : natural := 0;
                   file_name : string := "");
 
   procedure failure(msg : string;
+                    path_offset : natural := 0;
                     line_num : natural := 0;
                     file_name : string := "");
 
   procedure warning_if(condition : boolean;
                        msg : string;
+                       path_offset : natural := 0;
                        line_num : natural := 0;
                        file_name : string := "");
 
   procedure error_if(condition : boolean;
                      msg : string;
+                     path_offset : natural := 0;
                      line_num : natural := 0;
                      file_name : string := "");
 
   procedure failure_if(condition : boolean;
                        msg : string;
+                       path_offset : natural := 0;
                        line_num : natural := 0;
                        file_name : string := "");
 
@@ -133,11 +163,13 @@ package logger_pkg is
   procedure log(logger : logger_t;
                 msg : string;
                 log_level : log_level_t := info;
+                path_offset : natural := 0;
                 line_num : natural := 0;
                 file_name : string := "");
 
   procedure log(msg : string;
                 log_level : log_level_t := info;
+                path_offset : natural := 0;
                 line_num : natural := 0;
                 file_name : string := "");
 
@@ -146,6 +178,9 @@ package logger_pkg is
 
   -- Get the full name of this logger get_name(get_logger("parent:child")) = "parent:child"
   impure function get_full_name(logger : logger_t) return string;
+
+  -- Get identity for this logger.
+  impure function get_id(logger : logger_t) return id_t;
 
   -- Get the parent of this logger
   impure function get_parent(logger : logger_t) return logger_t;

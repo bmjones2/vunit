@@ -2,90 +2,62 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2014-2021, Lars Asplund lars.anders.asplund@gmail.com
+# Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 
 """
 Create monolithic release notes file from several input files
 """
 
 from pathlib import Path
-from os.path import relpath
-from glob import glob
-from subprocess import check_output, CalledProcessError
+from subprocess import check_call, check_output, CalledProcessError
 from shutil import which
-import datetime
-
-
-def get_releases(source_path: Path):
-    """
-    Get all releases defined by release note files
-    """
-    release_notes = source_path / "release_notes"
-    releases = []
-    for idx, file_name in enumerate(
-        sorted(glob(str(release_notes / "*.rst")), reverse=True)
-    ):
-        releases.append(Release(file_name, is_latest=idx == 0))
-    return releases
+from datetime import datetime
 
 
 def create_release_notes():
     """
     Create monolithic release notes file from several input files
     """
-    source_path = Path(__file__).parent.parent / "docs"
+    root = Path(__file__).parent.parent
+    docsroot = root / "docs"
 
-    releases = get_releases(source_path)
-    latest_release = releases[0]
+    check_call(["towncrier", "build", "--keep"], cwd=root)
 
-    with (source_path / "release_notes.rst").open("w") as fptr:
-        fptr.write(
-            """
-.. _release_notes:
+    # Get all releases defined by release note files
+    releases = [
+        Release(file_name, is_latest=idx == 0)
+        for idx, file_name in enumerate(sorted((docsroot / "release_notes").glob("*.rst"), reverse=True))
+    ]
 
-Release notes
-=============
+    content = (
+        "`Commits since last release "
+        f"<https://github.com/VUnit/vunit/compare/v{releases[0].name!s}...master>`__"
+        "\n\n"
+    )
 
-.. NOTE:: For installation instructions read :ref:`this <installing>`.
+    for idx, release in enumerate(releases):
+        title = f":vunit_commit:`{release.name!s} <v{release.name!s}>` - {release.date.strftime('%Y-%m-%d')}"
 
-`Commits since last release <https://github.com/VUnit/vunit/compare/%s...master>`__
+        if idx == 0:
+            title += " (latest)"
+            content += ".. _release:latest:\n\n"
 
-"""
-            % latest_release.tag
+        content += (
+            f".. _release:{release.name}:\n\n"
+            f"{title}\n{'-' * len(title)}\n\n"
+            f"`Download from PyPI <https://pypi.python.org/pypi/vunit_hdl/{release.name!s}/>`__"
         )
 
-        fptr.write("\n\n")
-
-        for idx, release in enumerate(releases):
-            is_last = idx == len(releases) - 1
-
-            if release.is_latest:
-                fptr.write(".. _latest_release:\n\n")
-
-            title = ":vunit_commit:`%s <%s>` - %s" % (
-                release.name,
-                release.tag,
-                release.date.strftime("%Y-%m-%d"),
-            )
-            if release.is_latest:
-                title += " (latest)"
-            fptr.write(title + "\n")
-            fptr.write("-" * len(title) + "\n\n")
-
-            fptr.write(
-                "\n`Download from PyPI <https://pypi.python.org/pypi/vunit_hdl/%s/>`__"
-                % release.name
+        if idx != len(releases) - 1:
+            content += (
+                f" | `Commits since previous release "
+                f"<https://github.com/VUnit/vunit/compare/v{releases[idx + 1].name!s}...v{release.name!s}>`__"
             )
 
-            if not is_last:
-                fptr.write(
-                    " | `Commits since previous release <https://github.com/VUnit/vunit/compare/%s...%s>`__"
-                    % (releases[idx + 1].tag, release.tag)
-                )
+        content += f"\n\n.. include:: release_notes/{release.name}{release.suffix}\n\n\n"
 
-            fptr.write("\n\n")
-
-            fptr.write(".. include:: %s\n" % relpath(release.file_name, source_path))
+    with open(str(docsroot / "release_notes.inc"), "w", encoding="utf-8") as fptr:
+        fptr.write(content)
 
 
 class Release(object):
@@ -94,33 +66,27 @@ class Release(object):
     """
 
     def __init__(self, file_name, is_latest):
-        self.file_name = file_name
-        self.name = str(Path(file_name).with_suffix("").name)
-        self.tag = "v" + self.name
-        self.is_latest = is_latest
+        self.suffix = file_name.suffix
+        self.name = file_name.stem
+        tag = "v" + self.name
+
+        git = which("git")
+        if git is None:
+            raise BaseException("'git' is required!")
 
         try:
-            self.date = _get_date(self.tag)
-
+            self._get_date(git, tag)
         except CalledProcessError:
-            if self.is_latest:
-                # Release tag for latest release not yet created, assume HEAD will become release
-                print("Release tag %s not created yet, use HEAD for date" % self.tag)
-                self.date = _get_date("HEAD")
-            else:
+            if not is_latest:
                 raise
+            print(f"Release tag {tag} not created yet, use HEAD for date")
+            self._get_date(git, "HEAD")
 
-        with open(file_name, "r") as fptr:
-            self.notes = fptr.read()
-
-
-def _get_date(commit):
-    """
-    Get date
-    """
-    git = which("git")
-    if git is None:
-        raise BaseException("'git' is required!")
-    date_str = check_output([git, "log", "-1", "--format=%ci", commit]).decode().strip()
-    date_str = " ".join(date_str.split(" ")[0:2])
-    return datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+    def _get_date(self, git, ref):
+        """
+        Get date
+        """
+        self.date = datetime.strptime(
+            " ".join(check_output([git, "log", "-1", "--format=%ci", ref]).decode().strip().split(" ")[0:2]),
+            "%Y-%m-%d %H:%M:%S",
+        )

@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2014-2021, Lars Asplund lars.anders.asplund@gmail.com
+# Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 
 """
 .. _custom_cli:
@@ -72,7 +72,7 @@ def _create_argument_parser(description=None, for_documentation=False):
     :returns: The created :mod:`argparse` parser object
     """
     if description is None:
-        description = "VUnit command line tool version %s" % version()
+        description = f"VUnit command line tool version {version()!s}"
 
     if for_documentation:
         default_output_path = "./vunit_out"
@@ -81,9 +81,7 @@ def _create_argument_parser(description=None, for_documentation=False):
 
     parser = argparse.ArgumentParser(description=description)
 
-    parser.add_argument(
-        "test_patterns", metavar="tests", nargs="*", default="*", help="Tests to run"
-    )
+    parser.add_argument("test_patterns", metavar="tests", nargs="*", default="*", help="Tests to run")
 
     parser.add_argument(
         "--with-attributes",
@@ -153,7 +151,13 @@ def _create_argument_parser(description=None, for_documentation=False):
     )
 
     parser.add_argument(
-        "--clean", action="store_true", default=False, help="Remove output path first"
+        "--clean",
+        action="store_true",
+        default=False,
+        help="Remove output path first. "
+        "This is useful, for example, to force a complete "
+        "recompile when compilation artifacts are obsolete "
+        "due to a simulator version update.",
     )
 
     parser.add_argument(
@@ -163,9 +167,7 @@ def _create_argument_parser(description=None, for_documentation=False):
         help="Output path for compilation and simulation artifacts",
     )
 
-    parser.add_argument(
-        "-x", "--xunit-xml", default=None, help="Xunit test report .xml file"
-    )
+    parser.add_argument("-x", "--xunit-xml", default=None, help="Xunit test report .xml file")
 
     parser.add_argument(
         "--xunit-xml-format",
@@ -193,10 +195,7 @@ def _create_argument_parser(description=None, for_documentation=False):
         "--dont-catch-exceptions",
         default=False,
         action="store_true",
-        help=(
-            "Let exceptions bubble up all the way. "
-            'Useful when running with "python -m pdb".'
-        ),
+        help=("Let exceptions bubble up all the way. " 'Useful when running with "python -m pdb".'),
     )
 
     parser.add_argument(
@@ -215,9 +214,7 @@ def _create_argument_parser(description=None, for_documentation=False):
         help="Do not print test output even in the case of failure",
     )
 
-    parser.add_argument(
-        "--no-color", action="store_true", default=False, help="Do not color output"
-    )
+    parser.add_argument("--no-color", action="store_true", default=False, help="Do not color output")
 
     parser.add_argument(
         "--log-level",
@@ -232,8 +229,7 @@ def _create_argument_parser(description=None, for_documentation=False):
         type=positive_int,
         default=1,
         help=(
-            "Number of tests to run in parallel. "
-            "Test output is not continuously written in verbose mode with p > 1"
+            "Number of tests to run in parallel. " "Test output is not continuously written in verbose mode with p > 1"
         ),
     )
 
@@ -245,9 +241,7 @@ def _create_argument_parser(description=None, for_documentation=False):
         help="Do not re-use the same simulator process for running different test cases (slower)",
     )
 
-    parser.add_argument(
-        "--export-json", default=None, help="Export project information to a JSON file."
-    )
+    parser.add_argument("--export-json", default=None, help="Export project information to a JSON file.")
 
     parser.add_argument("--version", action="version", version=version())
 
@@ -281,9 +275,7 @@ def positive_int(val):
         assert ival > 0
         return ival
     except (ValueError, AssertionError) as exv:
-        raise argparse.ArgumentTypeError(
-            "'%s' is not a valid positive int" % val
-        ) from exv
+        raise argparse.ArgumentTypeError(f"'{val!s}' is not a valid positive int") from exv
 
 
 def _parser_for_documentation():

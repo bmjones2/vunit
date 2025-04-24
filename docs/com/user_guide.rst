@@ -53,21 +53,34 @@ Basic Message Passing
 Sending and Receiving
 ---------------------
 
-To send a message we must first create an actor for the receiver. The actor
-below has a name passed to the ``new_actor`` function but ``com`` also allows
-unnamed actors
+To send a message we must first create an actor for the receiver. This is done with the ``new_actor``
+function which takes an optional name parameter. If no name is given the actor will be assigned
+a name internally on the format ``_actor_<n>`` where ``n`` denotes an integer unique to the
+actor.
 
 .. code-block:: vhdl
 
   constant my_receiver : actor_t := new_actor("my receiver");
 
+Internally an identity (see :ref:`identity package <id_user_guide>`) will be created for each actor
+and it is also possible to create an actor directly from an identity.
+
+  constant my_receiver_id : id_t := get_id("my receiver");
+  constant my_receiver : actor_t := new_actor(my_receiver_id);
+
 To send a message to the receiver the sender must have access to the value of the ``my_receiver`` constant.
 If the receiver made ``my_receiver`` publically available, for example with a package, it can be accessed
-directly. If not, it can be found with the ``find`` function providing it has a name.
+directly. If not, it can be found with the ``find`` function providing it has been given an explict name.
 
 .. code-block:: vhdl
 
   constant found_receiver : actor_t := find("my receiver");
+
+or
+
+.. code-block:: vhdl
+
+  constant found_receiver : actor_t := find(my_receiver_id);
 
 The next step is to create a message to send and we start by creating an empty message
 
@@ -184,7 +197,7 @@ message, pushing data, and sending). That gives an extra level of type safety (a
 
   memory_bfm_pkg.write(net, my_unsigned_address, my_std_logic_vector_data);
 
-If you do not expect the receiver to receive massages of a type it can't handle you can add this else statement
+If you do not expect the receiver to receive messages of a type it can't handle you can add this else statement
 
 .. code-block:: vhdl
 
@@ -275,7 +288,6 @@ procedure. Below is a read procedure for our memory BFM.
     receive_reply(net, request_msg, reply_msg);
     msg_type := message_type(reply_msg);
     data := pop(reply_msg);
-    delete(reply_msg);
   end;
 
 ``receive_reply`` will block until the specified message is received. All other incoming messages will be ignored but
@@ -523,7 +535,7 @@ It's also possible to wait for a reply with a timeout.
 
 
 Deferred Actor Creation
------------------------------
+-----------------------
 
 When finding an actor using the ``find`` function there is a potential race condition. What if the actor hasn't been
 created yet? The default VUnit solution is that the ``find`` function creates a temporary actor with limited
@@ -554,7 +566,7 @@ the actual testing starts. You can find out by calling the ``num_of_deferred_cre
 Publisher/Subscriber Pattern
 ****************************
 
-A common message pattern is the publisher/subscriber pattern where a publisher actor publishes a messages rather than
+A common message pattern is the publisher/subscriber pattern where a publisher actor publishes a message rather than
 sending it. Actors interested in these messages subscribe to the publisher and the published messages are received just
 like messages sent directly to the subscribers. The purpose of this pattern is to decouple the publisher from the
 subscribers, it doesn't have to know who the subscribers are and there is no need to update the publisher when
@@ -693,27 +705,27 @@ be aware of:
 * A subscription on the inbound traffic of an actor won't pick up replies to an anonymously request.
 
 Blocking subscribers
--------------------------
+--------------------
 
 Although the intent of the publisher/subscriber pattern is to decouple the publisher from the subscribers it can still
 be affected if a subscriber inbox is full. A message transaction will be blocked until all of its subscribers and any
 regular receiver have available space in their inboxes.
 
 Unsubscribing
------------------
+-------------
 
 An actor can unsubscribe from a subscription at any time by calling ``unsubscribe`` with the same parameters used when
 calling the ``subscribe`` procedure.
 
-****************************
+*********
 Debugging
-****************************
+*********
 Message passing provides a communication mechanism an abstraction level above the normal signalling in VHDL.
 This also means that there is a need for an equally elevated level of debugging. To support that ``com`` has
 a number of built-in features specially targeting debugging.
 
 Logging Messages
------------------
+----------------
 
 One way of debugging is to inspect the messages that flow through the system, for example by subscribing to actor
 traffic. You can use previously presented functions to find out sender, receiver and message content but you can
@@ -761,7 +773,7 @@ still see a difference when compared to the string presented above.
 
   30000 ps - vunit_lib:com -   TRACE - test sequencer inbox => [3:2 memory BFM -> test sequencer (read reply)]
 
-First is an actor mailbox (``test sequencer inbox``), than an arrow (``=>``) followed by the message string
+First is an actor mailbox (``test sequencer inbox``), then an arrow (``=>``) followed by the message string
 enclosed in square brackets. This means that the message was removed from the mailbox, for example as a result
 of a ``receive_reply`` call. ``com`` also logs when a message is put into a mailbox. In this
 example that event is logged 10 ns earlier and is the result of a ``reply`` call
@@ -815,8 +827,8 @@ The result is something like this
   Mailbox: inbox
     Size: 2147483647
     Messages:
-      0. 5:- - -> memory BFM (write)
-      1. 6:- - -> memory BFM (read)
+      0. 5:- _actor_3 -> memory BFM (write)
+      1. 6:- _actor_3 -> memory BFM (read)
 
 The size is the maximum number of messages that the mailbox can contain (this is dynamically allocated) while the
 list at the bottom shows the actual messages in the mailbox. Message 0 is the oldest message and the first one
@@ -839,9 +851,9 @@ actor's creation is deferred. For example,
     Mailbox: inbox
       Size: 2147483647
       Messages:
-        0. 8:- - -> driver (add)
-        1. 9:- - -> driver (add)
-        2. 10:- - -> driver (add)
+        0. 8:- _actor_3 -> driver (add)
+        1. 9:- _actor_3 -> driver (add)
+        2. 10:- _actor_3 -> driver (add)
     Mailbox: outbox
       Size: 2147483647
       Messages:
@@ -861,9 +873,9 @@ all deferred actors.
   messenger_state := get_messenger_state;
   debug(get_messenger_state_string);
 
-****************************
+***************
 Deprecated APIs
-****************************
+***************
 
 ``com`` maintains a number of deprecated APIs for better backward compatibility. Using these APIs will result in
 a runtime error unless enabled by calling the ``allow_deprecated`` procedure.

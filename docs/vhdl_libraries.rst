@@ -1,9 +1,12 @@
+.. _vhdl_libraries:
+
 VHDL Libraries
 ==============
 
 .. toctree::
    :maxdepth: 1
 
+   id/user_guide
    logging/user_guide
    check/user_guide
    run/user_guide
