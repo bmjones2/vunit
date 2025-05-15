@@ -1,0 +1,3 @@
+INFO: [XSIM 43-3496] Using init file passed via -initfile option "E:\projects\vunit_ics\vunit\vhdl\xsim\vunit_out\xsim\xsim.ini".
+INFO: [VRFC 10-163] Analyzing VHDL file "E:/projects/vunit_ics/vunit/vhdl/xsim/string_ops/test/tb_string_ops.vhd" into library lib
+INFO: [VRFC 10-3107] analyzing entity 'tb_string_ops'
