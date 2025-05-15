@@ -36,14 +36,35 @@ will use the default logger while
 
     info(my_logger, "Hello world");
 
-will use the custom ``my_logger``.
+will use the custom ``my_logger``. A custom logger is created
+by declaring a constant or a variable of type ``logger_t``.
 
-Log messages are then handled by a log handler. By default there are
-two output handlers, one for handling display (stdout) output and one
-for handling output to a file. Every log entry you do is passed to
-both these handlers. Each handler may have a different output format
-and log level setting. The format is used to control the layout and
-amount of information being displayed.
+.. code-block:: vhdl
+
+    constant my_logger : logger_t := get_logger("system0:uart0");
+
+``get_logger`` will internally create an identity for the name
+provided in the call (see :ref:`identity package <id_user_guide>`)
+which means that the concept of name hierarchy is inherited by
+loggers. In this case a logger will also be created for ``system0``
+if it didn't already exist.
+
+A logger can also be created directly from an identity.
+
+.. code-block:: vhdl
+
+    constant my_id : id_t := get_id("system0:uart0");
+    constant my_logger : logger_t := get_logger(my_id);
+
+Log Handlers
+------------
+
+Log messages made to a logger are handled by a log handler.
+By default there are two handlers, one for handling display (stdout)
+output and one for handling output to a file. Every log entry you do
+is passed to both these handlers. Each handler may have a different
+output format and log level setting. The format is used to control the
+layout and amount of information being displayed.
 
 Log Levels
 ----------
@@ -92,6 +113,37 @@ To make a log entry with the custom level use any of the `log` procedures:
     log("Mozilla Public License, v. 2.0.", license_info);
     log(my_logger, "Mozilla Public License, v. 2.0.", license_info);
 
+Formatting
+----------
+The default display format is ``verbose`` and the default file format
+is ``csv`` to enable simple log file parsing. The format can be
+changed to any of ``raw``, ``level``, ``verbose`` and ``csv``.
+
+.. code-block:: vhdl
+
+    set_format(display_handler, level);
+    info("Hello world");
+
+which will result in the following output.
+
+.. code-block:: console
+
+    INFO: Hello world
+
+The default ``verbose`` format which adds more details to the
+output looks like this:
+
+.. code-block:: console
+
+         1000 ps - default -    INFO - Hello world
+
+The verbose output will always contain the simulator time, the log
+level, the logger, and the message.
+
+The ``raw`` formatter just emits the log message and nothing else. The
+``csv`` formatter emits all information in the log entry as a comma
+separated list for convenient parsing.
+
 Stopping simulation
 -------------------
 By default the simulation will come to a stop if a single log with
@@ -100,7 +152,7 @@ before ``test_runner_cleanup`` is considered a failure.
 
 Simulation stop is controlled via a stop count mechanism. The stop count mechanism works in the following way:
 
-- Stop count may be ether set or not set for a specific logger and log level.
+- Stop count may be either set or not set for a specific logger and log level.
 - When a log is made to a logger it is checked if there is a stop count set.
 
   - If set it is decremented and reaching zero means simulation stops.
@@ -127,38 +179,6 @@ Example:
     -- Short hand for stopping on warning, error and failure for specific logger
     set_stop_level(get_logger("my_library:my_component"), warning)
 
-
-Formatting
-----------
-The default display format is ``verbose`` and the default file format
-is ``csv`` to enable simple log file parsing. The format can be
-changed to any of ``raw``, ``level``, ``verbose`` and ``csv``.
-
-.. code-block:: vhdl
-
-    set_format(display_handler, level);
-    info("Hello world");
-
-which will result in the following output.
-
-.. code-block:: console
-
-    INFO: Hello world
-
-There default ``verbose`` format which adds more details to the
-output looks like this:
-
-.. code-block:: console
-
-         1000 ps - default -    INFO - Hello world
-
-The verbose output will always contain the simulator time, the log
-level, the logger, and the message.
-
-The ``raw`` formatter just emits the log message and nothing else. The
-``csv`` formatter emits all information in the log entry as a comma
-separated list for convenient parsing.
-
 Print Procedure
 ---------------
 
@@ -178,24 +198,6 @@ It's also possible to print to an open file object.
 
 This procedure can be used to optimize performance by printing many messages before flushing or closing the file.
 
-
-Logging hierarchy
------------------
-
-Custom hierarchical loggers can be created to provide more information and control of what is being logged.
-
-.. code-block:: vhdl
-
-    constant temp_logger : logger_t := get_logger("temperature_sensor");
-    warning(temp_logger, "Over-temperature (73 degrees C)!");
-
-results in something like this with the ``verbose`` formatter.
-
-.. code-block:: console
-
-    1000 ps - temperature_sensor -    INFO - Over-temperature (73 degrees C)!
-
-
 Log visibility
 --------------
 
@@ -214,29 +216,6 @@ Log visibility to a log handler can be configured for specific log levels of a l
 
     -- Hide all debug output to display handler
     hide(display_handler, debug);
-
-
-Custom Loggers
---------------
-
-Previous chapters have used the built-in default logger for the
-examples but you can also create your own loggers. You do that by
-declaring a constant of type ``logger_t``.
-
-.. code-block:: vhdl
-
-    constant my_logger : logger_t := get_logger("system0:uart0");
-
-and then you use that variable as the first parameter in the procedure
-calls presented in the previous chapters, for example.
-
-.. code-block:: vhdl
-
-    info(my_logger, "Hello world");
-
-Logger names are hierarchical which means setting the log level of
-``system0`` will also set it for ``uart0``.
-
 
 Mocking
 -------
@@ -267,7 +246,7 @@ state.  The ``unmock`` call also checks that all recorded log messages
 have been checked by a corresponding ``check_log`` or
 ``check_only_log`` procedure.
 
-It is possible to mock several logger or log levels simultaneously.
+It is possible to mock several loggers or log levels simultaneously.
 All mocked log messages are written to the same global mock queue.
 The number of log messages in this queue is returned by the
 ``mock_queue_length`` function.
@@ -300,19 +279,31 @@ counted to get statistics on disabled log messages.
     disable(get_logger("memory_ip:timing_check"), warning);
 
 
-Log Location Preprocessing
---------------------------
+Log Location
+------------
 
-The optional VUnit location preprocessor can be used to add file name
-and line number location information to all log calls. This
-functionality is enabled from the ``run.py`` file like this:
+For simulators supporting VHDL-2019 VUnit adds file name
+and line number location information to all log entries. Currently
+only Riviera-PRO and Active-HDL supports VHDL-2019 and they restrict the feature
+to **debug compiled files**. You can compile all files or just the ones
+using logging. For example,
+
+.. code-block:: python
+
+    testbenches = lib.get_source_files("*tb*")
+    testbenches.set_compile_option("rivierapro.vcom_flags", ["-dbg"])
+
+
+For earlier VHDL standards there is an optional location preprocessor that can
+be used to serve the same purpose. The preprocessor is enabled from
+the ``run.py`` file like this:
 
 .. code-block:: python
 
     ui = VUnit.from_argv()
     ui.enable_location_preprocessing()
 
-and will change the output to something like this.
+Regardless of method the location information is appended to the end of the log entry:
 
 .. code-block:: console
 
@@ -322,8 +313,25 @@ and will change the output to something like this.
 If you've placed your log call(s) in a convenience procedure you most
 likely want the location of the calls to that procedure to be in the
 output and not the location of the log call in the definition of the
-convenience procedure. You can do that by adding the ``line_num`` and
-``file_name`` parameters to the **end** of the parameter list for that
+convenience procedure. For VHDL-2019 you can use the ``path_offset``
+parameter to specify a number of steps earlier in the call stack. For
+example,
+
+.. code-block:: vhdl
+
+    procedure my_convenience_procedure(
+      <my parameters>) is
+    begin
+      <some code>
+      info("Some message", path_offset => 1);
+      <some code>
+    end procedure my_convenience_procedure;
+
+When ``path_offset`` is set to 1 the location of the caller to
+``my_convenience_procedure`` will be used in the log output.
+
+With earlier VHDL standard you can add the ``line_num`` and
+``file_name`` parameters to the **end** of the parameter list for the
 convenience procedure
 
 .. code-block:: vhdl

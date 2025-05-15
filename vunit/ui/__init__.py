@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2014-2021, Lars Asplund lars.anders.asplund@gmail.com
+# Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 
 # pylint: disable=too-many-lines
 
@@ -19,6 +19,7 @@ import os
 from typing import Optional, Set, Union
 from pathlib import Path
 from fnmatch import fnmatch
+
 from ..database import PickledDataBase, DataBase
 from .. import ostools
 from ..vunit_cli import VUnitCLI
@@ -40,13 +41,11 @@ from ..test.list import TestList
 
 from .common import LOGGER, TEST_OUTPUT_PATH, select_vhdl_standard, check_not_empty
 from .source import SourceFile, SourceFileList
-from .library import Library
+from .library import Library, LibraryList
 from .results import Results
 
 
-class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-methods
-    object
-):
+class VUnit(object):  # pylint: disable=too-many-instance-attributes, too-many-public-methods
     """
     The public interface of VUnit
 
@@ -80,11 +79,21 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
            from vunit import VUnit
            prj = VUnit.from_argv()
 
+        .. IMPORTANT::
+          Option ``compile_builtins`` is deprecated and it will be removed in an upcoming release.
+          VHDL users will need to call method :meth:`add_vhdl_builtins` explicitly in order to preserve the
+          functionality.
+          See :vunit_issue:`777`.
+          It is therefore recommended to now use the following procedure:
+
+          .. code-block:: python
+
+             from vunit import VUnit
+             prj = VUnit.from_argv(compile_builtins=False)
+             prj.add_vhdl_builtins()
         """
         args = VUnitCLI().parse_args(argv=argv)
-        return cls.from_args(
-            args, compile_builtins=compile_builtins, vhdl_standard=vhdl_standard
-        )
+        return cls.from_args(args, compile_builtins=compile_builtins, vhdl_standard=vhdl_standard)
 
     @classmethod
     def from_args(
@@ -105,6 +114,11 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
                               if None the VUNIT_VHDL_STANDARD environment variable is used
         :returns: A :class:`.VUnit` object instance
 
+        .. IMPORTANT::
+          Option ``compile_builtins`` is deprecated and it will be removed in an upcoming release.
+          VHDL users will need to call method :meth:`add_vhdl_builtins` explicitly in order to preserve the
+          functionality.
+          See :vunit_issue:`777`.
         """
         return cls(args, compile_builtins=compile_builtins, vhdl_standard=vhdl_standard)
 
@@ -139,9 +153,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
         self._test_filter = test_filter
         self._vhdl_standard: VHDLStandard = select_vhdl_standard(vhdl_standard)
 
-        self._external_preprocessors = []  # type: ignore
-        self._location_preprocessor = None
-        self._check_preprocessor = None
+        self._preprocessors = []  # type: ignore
 
         self._simulator_class = SIMULATOR_FACTORY.select_simulator()
 
@@ -151,7 +163,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
             self._simulator_output_path = str(Path(self._output_path) / "none")
         else:
             simulator_class = self._simulator_class
-            self._simulator_output_path = str(Path(self._output_path) / str(args.simulator))
+            self._simulator_output_path = str(Path(self._output_path) / simulator_class.name)
 
         self._create_output_path(args.clean)
 
@@ -165,7 +177,21 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
 
         self._builtins = Builtins(self, self._vhdl_standard, simulator_class)
         if compile_builtins:
-            self.add_builtins()
+            self.add_vhdl_builtins()
+            hline = "=" * 75
+            print(hline)
+            LOGGER.warning(
+                """Option 'compile_builtins' of methods 'from_args' and 'from_argv' is deprecated.
+In future releases, it will be removed and builtins will need to be added explicitly.
+To prepare for upcoming changes, it is recommended to apply the following modifications in the run script now:
+
+* Use `from_argv(compile_builtins=False)` or `from_args(compile_builtins=False)`.
+* Add an explicit call to 'add_vhdl_builtins'.
+
+See https://github.com/VUnit/vunit/issues/777.
+"""
+            )
+            print(hline)
 
     def _create_database(self):
         """
@@ -200,9 +226,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
         Configure logging based on log_level string
         """
         level = getattr(logging, log_level.upper())
-        logging.basicConfig(
-            filename=None, format="%(levelname)7s - %(message)s", level=level
-        )
+        logging.basicConfig(filename=None, format="%(levelname)7s - %(message)s", level=level)
 
     def _which_vhdl_standard(self, vhdl_standard: Optional[str]) -> VHDLStandard:
         """
@@ -214,9 +238,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
 
         return VHDL.standard(vhdl_standard)
 
-    def add_external_library(
-        self, library_name, path: Union[str, Path], vhdl_standard: Optional[str] = None
-    ):
+    def add_external_library(self, library_name, path: Union[str, Path], vhdl_standard: Optional[str] = None):
         """
         Add an externally compiled library as a black-box
 
@@ -242,9 +264,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
         )
         return self.library(library_name)
 
-    def add_source_files_from_csv(
-        self, project_csv_path: Union[str, Path], vhdl_standard: Optional[str] = None
-    ):
+    def add_source_files_from_csv(self, project_csv_path: Union[str, Path], vhdl_standard: Optional[str] = None):
         """
         Add a project configuration, mapping all the libraries and files
 
@@ -254,32 +274,26 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
                                  csv file
         :param vhdl_standard: The VHDL standard used to compile files,
                               if None, the VUNIT_VHDL_STANDARD environment variable is used
-        :returns: A list of files (:class `.SourceFileList`) that were added
+        :returns: A list of files (:class:`.SourceFileList`) that were added
 
         """
         libs: Set[str] = set()
-        files = SourceFileList(list())
+        files = SourceFileList([])
 
         ppath = Path(project_csv_path)
 
-        with ppath.open() as csv_path_file:
+        with ppath.open("r", encoding="utf-8") as csv_path_file:
             for row in csv.reader(csv_path_file):
                 if len(row) == 2:
                     lib_name = row[0].strip()
                     no_normalized_file = row[1].strip()
                     file_name_ = str((ppath.parent / no_normalized_file).resolve())
-                    lib = (
-                        self.library(lib_name)
-                        if lib_name in libs
-                        else self.add_library(lib_name)
-                    )
+                    lib = self.library(lib_name) if lib_name in libs else self.add_library(lib_name)
                     libs.add(lib_name)
                     file_ = lib.add_source_file(file_name_, vhdl_standard=vhdl_standard)
                     files.append(file_)
                 elif len(row) > 2:
-                    LOGGER.error(
-                        "More than one library and one file in csv description"
-                    )
+                    LOGGER.error("More than one library and one file in csv description")
         return files
 
     def add_library(
@@ -311,10 +325,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
         if not self._project.has_library(library_name):
             self._project.add_library(library_name, str(path.resolve()), standard)
         elif not allow_duplicate:
-            raise ValueError(
-                "Library %s already added. Use allow_duplicate to ignore this error."
-                % library_name
-            )
+            raise ValueError(f"Library {library_name!s} already added. Use allow_duplicate to ignore this error.")
         return self.library(library_name)
 
     def library(self, library_name: str):
@@ -327,6 +338,30 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
         if not self._project.has_library(library_name):
             raise KeyError(library_name)
         return Library(library_name, self, self._project, self._test_bench_list)
+
+    def get_libraries(
+        self,
+        pattern="*",
+        allow_empty: Optional[bool] = False,
+    ):
+        """
+        Get a list of libraries
+
+        :param pattern: A wildcard pattern matching the library name
+        :param allow_empty: To disable an error if no labraries matched the pattern
+        :returns: A :class:`.LibraryList` object
+        """
+        results = []
+
+        for library in self._project.get_libraries():
+            if not fnmatch(library.name, pattern):
+                continue
+
+            results.append(self.library(library.name))
+
+        check_not_empty(results, allow_empty, f"Pattern {pattern} did not match any library")
+
+        return LibraryList(results)
 
     def set_attribute(self, name: str, value: str, allow_empty: Optional[bool] = False):
         """
@@ -346,9 +381,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
            Only affects test benches added *before* the attribute is set.
         """
         test_benches = self._test_bench_list.get_test_benches()
-        for test_bench in check_not_empty(
-            test_benches, allow_empty, "No test benches found"
-        ):
+        for test_bench in check_not_empty(test_benches, allow_empty, "No test benches found"):
             test_bench.set_attribute(name, value)
 
     def set_generic(self, name: str, value: str, allow_empty: Optional[bool] = False):
@@ -369,9 +402,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
            Only affects test benches added *before* the generic is set.
         """
         test_benches = self._test_bench_list.get_test_benches()
-        for test_bench in check_not_empty(
-            test_benches, allow_empty, "No test benches found"
-        ):
+        for test_bench in check_not_empty(test_benches, allow_empty, "No test benches found"):
             test_bench.set_generic(name.lower(), value)
 
     def set_parameter(self, name: str, value: str, allow_empty: Optional[bool] = False):
@@ -392,9 +423,7 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
            Only affects test benches added *before* the parameter is set.
         """
         test_benches = self._test_bench_list.get_test_benches()
-        for test_bench in check_not_empty(
-            test_benches, allow_empty, "No test benches found"
-        ):
+        for test_bench in check_not_empty(test_benches, allow_empty, "No test benches found"):
             test_bench.set_generic(name, value)
 
     def set_sim_option(
@@ -422,14 +451,10 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
            Only affects test benches added *before* the option is set.
         """
         test_benches = self._test_bench_list.get_test_benches()
-        for test_bench in check_not_empty(
-            test_benches, allow_empty, "No test benches found"
-        ):
+        for test_bench in check_not_empty(test_benches, allow_empty, "No test benches found"):
             test_bench.set_sim_option(name, value, overwrite)
 
-    def set_compile_option(
-        self, name: str, value: str, allow_empty: Optional[bool] = False
-    ):
+    def set_compile_option(self, name: str, value: str, allow_empty: Optional[bool] = False):
         """
         Set compile option of all files
 
@@ -448,14 +473,10 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
            Only affects files added *before* the option is set.
         """
         source_files = self._project.get_source_files_in_order()
-        for source_file in check_not_empty(
-            source_files, allow_empty, "No source files found"
-        ):
+        for source_file in check_not_empty(source_files, allow_empty, "No source files found"):
             source_file.set_compile_option(name, value)
 
-    def add_compile_option(
-        self, name: str, value: str, allow_empty: Optional[bool] = False
-    ):
+    def add_compile_option(self, name: str, value: str, allow_empty: Optional[bool] = False):
         """
         Add compile option to all files
 
@@ -467,14 +488,10 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
            Only affects files added *before* the option is set.
         """
         source_files = self._project.get_source_files_in_order()
-        for source_file in check_not_empty(
-            source_files, allow_empty, "No source files found"
-        ):
+        for source_file in check_not_empty(source_files, allow_empty, "No source files found"):
             source_file.add_compile_option(name, value)
 
-    def get_source_file(
-        self, file_name: Union[str, Path], library_name: Optional[str] = None
-    ):
+    def get_source_file(self, file_name: Union[str, Path], library_name: Optional[str] = None):
         """
         Get a source file
 
@@ -487,17 +504,12 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
 
         files = self.get_source_files(fstr, library_name, allow_empty=True)
         if len(files) > 1:
-            raise ValueError(
-                "Found file named '%s' in multiple-libraries, "
-                "add explicit library_name." % fstr
-            )
+            raise ValueError(f"Found file named '{fstr!s}' in multiple-libraries, " "add explicit library_name.")
         if not files:
             if library_name is None:
-                raise ValueError("Found no file named '%s'" % fstr)
+                raise ValueError(f"Found no file named '{fstr!s}'")
 
-            raise ValueError(
-                "Found no file named '%s' in library '%s'" % (fstr, library_name)
-            )
+            raise ValueError(f"Found no file named '{fstr!s}' in library '{library_name!s}'")
         return files[0]
 
     def get_source_files(
@@ -531,10 +543,8 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
         check_not_empty(
             results,
             allow_empty,
-            ("Pattern %r did not match any file" % pattern)
-            + (
-                ("within library %s" % library_name) if library_name is not None else ""
-            ),
+            f"Pattern {pattern!r} did not match any file"
+            + (f"within library {library_name!s}" if library_name is not None else ""),
         )
 
         return SourceFileList(results)
@@ -626,24 +636,22 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
             file_type=file_type,
         )
 
-    def _preprocess(
-        self, library_name: str, file_name: Union[str, Path], preprocessors
-    ):
+    def _preprocess(self, library_name: str, file_name: Union[str, Path], preprocessors):
         """
         Preprocess file_name within library_name using explicit preprocessors
-        if preprocessors is None then use implicit globally defined processors
+        if preprocessors is None then use implicit globally defined preprocessors.
         """
         # @TODO dependency checking etc...
 
         if preprocessors is None:
-            preprocessors = [self._location_preprocessor, self._check_preprocessor]
-            preprocessors = [p for p in preprocessors if p is not None]
-            preprocessors = self._external_preprocessors + preprocessors
+            preprocessors = self._preprocessors
 
         fstr = str(file_name)
 
         if not preprocessors:
             return fstr
+
+        preprocessors.sort(key=lambda x: 0 if not hasattr(x, "order") else x.order)
 
         fname = str(Path(file_name).name)
 
@@ -662,13 +670,9 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
 
             idx = 1
             while ostools.file_exists(pp_file_name):
-                LOGGER.debug(
-                    "Preprocessed file exists '%s', adding prefix", pp_file_name
-                )
+                LOGGER.debug("Preprocessed file exists '%s', adding prefix", pp_file_name)
                 pp_file_name = str(
-                    Path(self._preprocessed_path)
-                    / library_name
-                    / ("%i_%s" % (idx, fname)),
+                    Path(self._preprocessed_path) / library_name / f"{idx}_{fname!s}",
                 )
                 idx += 1
 
@@ -677,13 +681,13 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
 
     def add_preprocessor(self, preprocessor):
         """
-        Add a custom preprocessor to be used on all files, must be called before adding any files
-        """
-        self._external_preprocessors.append(preprocessor)
+        Adds a custom preprocessor to be used on all files. Must be called before adding any files.
 
-    def enable_location_preprocessing(
-        self, additional_subprograms=None, exclude_subprograms=None
-    ):
+        :param preprocessor: Instance of of :class:`.Preprocessor`
+        """
+        self._preprocessors.append((preprocessor))
+
+    def enable_location_preprocessing(self, additional_subprograms=None, exclude_subprograms=None, order=100):
         """
         Inserts file name and line number information into VUnit check and log subprograms calls. Custom
         subprograms can also be added. Must be called before adding any files.
@@ -691,6 +695,8 @@ class VUnit(  # pylint: disable=too-many-instance-attributes, too-many-public-me
         :param additional_subprograms: List of custom subprograms to add the line_num and file_name parameters to.
         :param exclude_subprograms: List of VUnit subprograms to exclude from location preprocessing. Used to \
 avoid location preprocessing of other functions sharing name with a VUnit log or check subprogram.
+        :param order: Integer controlling in which order the location preprocessor is applied in relation to \
+other preprocessors. Lowest value first. The order between preprocessors with the same value is undefined.
 
         :example:
 
@@ -700,7 +706,7 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
                                              exclude_subprograms=['log'])
 
         """
-        preprocessor = LocationPreprocessor()
+        preprocessor = LocationPreprocessor(order)
         if additional_subprograms is not None:
             for subprogram in additional_subprograms:
                 preprocessor.add_subprogram(subprogram)
@@ -708,13 +714,18 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         if exclude_subprograms is not None:
             for subprogram in exclude_subprograms:
                 preprocessor.remove_subprogram(subprogram)
-        self._location_preprocessor = preprocessor
 
-    def enable_check_preprocessing(self):
+        self.add_preprocessor(preprocessor)
+
+    def enable_check_preprocessing(self, order=200):
         """
-        Inserts error context information into VUnit check_relation calls
+        Inserts error context information into VUnit check_relation calls.
+
+        :param order: Integer controlling in which order the check preprocessor is applied in relation to \
+other preprocessors. Lowest value first. The order between preprocessors with the same value is undefined.
+
         """
-        self._check_preprocessor = CheckPreprocessor()
+        self.add_preprocessor(CheckPreprocessor(order))
 
     def main(self, post_run=None):
         """
@@ -748,9 +759,7 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         Create the test cases
         """
         self._test_bench_list.warn_when_empty()
-        test_list = self._test_bench_list.create_tests(
-            simulator_if, self._args.elaborate
-        )
+        test_list = self._test_bench_list.create_tests(simulator_if, self._args.elaborate)
         test_list.keep_matches(self._test_filter)
         if self._first_test_only:
             if test_list is not None and len(test_list) > 0:
@@ -797,9 +806,7 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         if not Path(self._simulator_output_path).exists():
             os.makedirs(self._simulator_output_path)
 
-        return self._simulator_class.from_args(
-            args=self._args, output_path=self._simulator_output_path
-        )
+        return self._simulator_class.from_args(args=self._args, output_path=self._simulator_output_path)
 
     def _main_run(self, post_run):
         """
@@ -842,12 +849,10 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         test_list = self._create_tests(simulator_if=None)
         for test_name in test_list.test_names:
             print(test_name)
-        print("Listed %i tests" % test_list.num_tests)
+        print(f"Listed {test_list.num_tests} tests")
         return True
 
-    def _main_export_json(
-        self, json_file_name: Union[str, Path]
-    ):  # pylint: disable=too-many-locals
+    def _main_export_json(self, json_file_name: Union[str, Path]):  # pylint: disable=too-many-locals
         """
         Main function when exporting to JSON
         """
@@ -856,10 +861,10 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         files = []
         for source_file in file_objects:
             files.append(
-                dict(
-                    file_name=str(Path(source_file.name).resolve()),
-                    library_name=source_file.library.name,
-                )
+                {
+                    "file_name": str(Path(source_file.name).resolve()),
+                    "library_name": source_file.library.name,
+                }
             )
 
         tests = []
@@ -877,27 +882,27 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
                 attributes.update(config.attributes)
 
                 tests.append(
-                    dict(
-                        name=name,
-                        location=dict(
-                            file_name=str(info.location.file_name),
-                            offset=info.location.offset,
-                            length=info.location.length,
-                        ),
-                        attributes=attributes,
-                    )
+                    {
+                        "name": name,
+                        "location": {
+                            "file_name": str(info.location.file_name),
+                            "offset": info.location.offset,
+                            "length": info.location.length,
+                        },
+                        "attributes": attributes,
+                    }
                 )
 
-        json_data = dict(
+        json_data = {
             # The semantic version (https://semver.org/) of the JSON export data format
-            export_format_version=dict(major=1, minor=0, patch=0),
+            "export_format_version": {"major": 1, "minor": 0, "patch": 0},
             # The set of files added to the project
-            files=files,
+            "files": files,
             # The list of all tests
-            tests=tests,
-        )
+            "tests": tests,
+        }
 
-        with Path(json_file_name).open("w") as fptr:
+        with Path(json_file_name).open("w", encoding="utf-8") as fptr:
             json.dump(json_data, fptr, sort_keys=True, indent=4, separators=(",", ": "))
 
         return True
@@ -908,8 +913,8 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         """
         files = self.get_compile_order()
         for source_file in files:
-            print("%s, %s" % (source_file.library.name, source_file.name))
-        print("Listed %i files" % len(files))
+            print(f"{source_file.library.name!s}, {source_file.name!s}")
+        print(f"Listed {len(files)} files")
         return True
 
     def _main_compile_only(self):
@@ -967,9 +972,7 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         test_list = self._create_tests(simulator_if)
         tb_file_names = {test_suite.file_name for test_suite in test_list}
         return [
-            self.get_source_file(  # pylint: disable=protected-access
-                file_name
-            )._source_file
+            self.get_source_file(file_name)._source_file  # pylint: disable=protected-access
             for file_name in tb_file_names
         ]
 
@@ -996,15 +999,37 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         )
         runner.run(test_cases)
 
-    def add_builtins(self, external=None):
+    def add_verilog_builtins(self):
         """
-        Add vunit VHDL builtin libraries
+        Add VUnit Verilog builtin libraries.
+
+        .. IMPORTANT::
+          Class ``vunit.verilog`` is deprecated and it will be removed in an upcoming release.
+          Verilog users will need to call this method explicitly in order to preserve the functionality.
+          See :vunit_issue:`777`.
+        """
+        self._builtins.add_verilog_builtins()
+
+    def add_vhdl_builtins(self, external=None):
+        """
+        Add VUnit VHDL builtin libraries.
 
         :param external: struct to provide bridges for the external VHDL API.
-                         {
+
+        :example:
+
+        .. code-block:: python
+
+            VU.add_vhdl_builtins(external={
                              'string': ['path/to/custom/file'],
-                             'integer': ['path/to/custom/file']
-                         }.
+                'integer': ['path/to/custom/file']}
+            )
+
+        .. IMPORTANT::
+          Option ``compile_builtins`` of methods :meth:`from_argv` and :meth:`from_args` is deprecated and it will be
+          removed in an upcoming release.
+          VHDL users will need to call this method explicitly in order to preserve the functionality.
+          See :vunit_issue:`777`.
         """
         self._builtins.add_vhdl_builtins(external=external)
 
@@ -1058,23 +1083,15 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         compile order dependency but the component instance will not
         elaborate if there is no binding component.
 
-        :param source_files: A list of :class:`.SourceFile` objects or `None` meaing all
+        :param source_files: A list of :class:`.SourceFile` objects or `None` meaning all
         :returns: A list of :class:`.SourceFile` objects in compile order.
         """
         if source_files is None:
             source_files = self.get_source_files(allow_empty=True)
 
-        target_files = [
-            source_file._source_file  # pylint: disable=protected-access
-            for source_file in source_files
-        ]
+        target_files = [source_file._source_file for source_file in source_files]  # pylint: disable=protected-access
         source_files = self._project.get_dependencies_in_compile_order(target_files)
-        return SourceFileList(
-            [
-                SourceFile(source_file, self._project, self)
-                for source_file in source_files
-            ]
-        )
+        return SourceFileList([SourceFile(source_file, self._project, self) for source_file in source_files])
 
     def get_implementation_subset(self, source_files):
         """
@@ -1085,19 +1102,9 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         :param source_files: A list of :class:`.SourceFile` objects
         :returns: A list of :class:`.SourceFile` objects which is the implementation subset.
         """
-        target_files = [
-            source_file._source_file  # pylint: disable=protected-access
-            for source_file in source_files
-        ]
-        source_files = self._project.get_dependencies_in_compile_order(
-            target_files, implementation_dependencies=True
-        )
-        return SourceFileList(
-            [
-                SourceFile(source_file, self._project, self)
-                for source_file in source_files
-            ]
-        )
+        target_files = [source_file._source_file for source_file in source_files]  # pylint: disable=protected-access
+        source_files = self._project.get_dependencies_in_compile_order(target_files, implementation_dependencies=True)
+        return SourceFileList([SourceFile(source_file, self._project, self) for source_file in source_files])
 
     def get_simulator_name(self):
         """
