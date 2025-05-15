@@ -322,11 +322,11 @@ class XSimInterface(SimulatorInterface):
         timescale = config.sim_options.get(self.name + ".timescale", None)
         if timescale:
             cmd += ["-timescale", timescale]
-        dirname = os.path.dirname(self._libraries[config.library_name])
-        shutil.copytree(dirname, os.path.join(output_path, os.path.basename(dirname)))
+
         # TODO linux might require different quotes for generic_top
         for generic_name, generic_value in config.generics.items():
             cmd += ["--generic_top", f'"{generic_name!s}={encode_generic_value(generic_value)!s}"']
+
         if not os.path.exists(output_path):
             os.makedirs(output_path)
 
