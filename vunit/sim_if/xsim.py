@@ -102,6 +102,12 @@ class XSimInterface(SimulatorInterface):
             cmd = " ".join(cmd)
         return cmd
 
+    def _format_generics_for_os(cls, generic_name, generic_value):
+        if (sys.platform == "win32" or os.name == "os2"):
+            return f'"{generic_name!s}={encode_generic_value(generic_value)!s}"'
+        else:
+            return f'{generic_name!s}={encode_generic_value(generic_value)!s}'
+
     def check_tool(self, tool_name):
         """
         Checks to see if a tool exists, with extensions both gor Windows and Linux
@@ -143,7 +149,7 @@ class XSimInterface(SimulatorInterface):
 
     def add_simulator_specific(self, project):
         """
-        Add libraries from modelsim.ini file and add coverage flags
+        Add libraries from xsim.ini file and add coverage flags
         """
         mapped_libraries = self._get_mapped_libraries()
         for library_name in mapped_libraries:
@@ -323,7 +329,7 @@ class XSimInterface(SimulatorInterface):
 
         # TODO linux might require different quotes for generic_top
         for generic_name, generic_value in config.generics.items():
-            cmd += ["--generic_top", f'"{generic_name!s}={encode_generic_value(generic_value)!s}"']
+            cmd += ["--generic_top", self._format_generics_for_os(generic_name, generic_value)]
 
         if not os.path.exists(output_path):
             os.makedirs(output_path)
@@ -347,7 +353,6 @@ class XSimInterface(SimulatorInterface):
         try:
             # Execute XSIM
             if not elaborate_only:
-                # FIXME linux path needs on Windows?
                 tcl_file = os.path.join(output_path, "xsim_startup.tcl").replace(os.sep, '/')
 
                 # XSIM binary
