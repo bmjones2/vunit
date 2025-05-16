@@ -49,7 +49,7 @@ package body logger_pkg is
   impure function get_logger(name : string;
     parent : logger_t := null_logger) return logger_t is
   begin
-  return null_logger;
+    return null_logger;
   end;
 
   constant p_default_logger : logger_t := get_logger("default");
@@ -58,8 +58,6 @@ package body logger_pkg is
     return p_default_logger;
   end;
 
-  constant log_level_filter : integer_vector_ptr_t := new_integer_vector_ptr(length => 16, value => log_level_invisible);
-
   procedure log(logger : logger_t;
                 msg : string;
                 log_level : log_level_t := info;
@@ -67,8 +65,31 @@ package body logger_pkg is
                 line_num : natural := 0;
                 file_name : string := "") is
     variable idx : natural := log_level_t'pos(log_level);
+    variable show_msg : boolean;
   begin
-    report(msg);
+
+    -- check if we should show this message
+    -- only support default logger
+    show_msg := true;
+    if logger = default_logger then
+      if default_log_level_enabled(idx) /= '1' then
+        show_msg := false;
+      end if;
+    end if;
+
+    if show_msg then
+      case log_level is
+        when trace   => report "TRACE: "   & msg severity severity_level'(note);
+        when debug   => report "DEBUG: "   & msg severity severity_level'(note);
+        when pass    => report "PASS: "    & msg severity severity_level'(note);
+        when info    => report "INFO: "    & msg severity severity_level'(note);
+        when warning => report "WARNING: " & msg severity severity_level'(warning);
+        when error   => report "ERROR: "   & msg severity severity_level'(error);
+        when failure => report "FAILURE: " & msg severity severity_level'(failure);
+        when others  => report msg severity severity_level'(note);
+      end case;
+    end if;
+
     -- keep track of count
     log_counts(idx) := log_counts(idx) + 1;
   end procedure;
@@ -273,7 +294,10 @@ procedure log(msg : string;
   impure function is_visible(logger : logger_t;
                              log_level : log_level_t) return boolean is
   begin
-    return get(log_level_filter, log_level_t'pos(log_level)) = log_level_visible;
+    if logger = default_logger then
+      return default_log_level_enabled(log_level_t'pos(log_level)) = '1';
+    end if;
+    return false;
   end;
 
   procedure set_log_level_filter(logger : logger_t;
@@ -281,17 +305,16 @@ procedure log(msg : string;
                                  log_levels : log_level_vec_t;
                                  visible : boolean;
                                  include_children : boolean) is
-    variable log_level_setting : natural;
   begin
-    if visible then
-      log_level_setting := log_level_visible;
-    else
-      log_level_setting := log_level_invisible;
+    if logger = default_logger then
+      for i in log_levels'range loop
+        if visible then
+          default_log_level_enabled(log_level_t'pos(log_levels(i))) := '1';
+        else
+          default_log_level_enabled(log_level_t'pos(log_levels(i))) := '0';
+        end if;
+      end loop;
     end if;
-
-    for i in log_levels'range loop
-      set(log_level_filter, log_level_t'pos(log_levels(i)), log_level_setting);
-    end loop;
   end;
 
   impure function get_id(logger : logger_t) return id_t is
@@ -440,13 +463,7 @@ procedure log(msg : string;
                     log_level : log_level_t;
                     include_children : boolean := true) is
   begin
-    set_state(logger, log_level, disabled_state);
 
-    if include_children then
-      for idx in 0 to num_children(logger)-1 loop
-        disable(get_child(logger, idx), log_level, include_children => true);
-      end loop;
-    end if;
   end;
 
 end package body;

@@ -4,6 +4,8 @@
 --
 -- Copyright (c) 2014-2022, Lars Asplund lars.anders.asplund@gmail.com
 
+library ieee;
+use ieee.std_logic_1164.all;
 use work.log_levels_pkg.all;
 use work.log_handler_pkg.all;
 use work.integer_vector_ptr_pkg.all;
@@ -15,6 +17,12 @@ package logger_pkg is
 
   type log_count_vec_t is array (natural range 0 to n_log_levels-1) of natural;
   shared variable log_counts : log_count_vec_t := (others => 0);
+  shared variable default_log_level_enabled : std_logic_vector(n_log_levels-1 downto 0)
+    := (log_level_t'pos(warning) => '1',
+      log_level_t'pos(error) => '1',
+      log_level_t'pos(failure) => '1',
+      log_level_t'pos(info) => '1',
+      others=>'0');
 
   type logger_t is record
     p_data : integer_vector_ptr_t;
