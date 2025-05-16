@@ -199,11 +199,7 @@ class XSimInterface(SimulatorInterface):
         """
         Convert standard to format of Modelsim command line flag
         """
-        # if vhdl_standard <= VHDL.STD_2008:
-            # return f"-{vhdl_standard!s}"
-        return "-2008"
-
-        raise ValueError(f"Invalid VHDL standard {vhdl_standard!s}")
+        return "--2008"
 
     def compile_vhdl_file_command(self, source_file):
         """
@@ -213,8 +209,9 @@ class XSimInterface(SimulatorInterface):
         cmd += [self._std_str(source_file.get_vhdl_standard())]
         cmd += self.work_library_argument(source_file)
         cmd += ["--initfile", self._sim_cfg_file_name]
+        cmd += ["--incr", "--relax"]
+        cmd += ["--nolog"]
         cmd += [source_file.name]
-        # cmd += self.libraries_command()
         return self._format_command_for_os(cmd)
 
     def compile_verilog_file_command(self, source_file, cmd):
@@ -223,7 +220,8 @@ class XSimInterface(SimulatorInterface):
         """
         cmd += self.work_library_argument(source_file)
         cmd += ["--initfile", self._sim_cfg_file_name]
-        # cmd += self.libraries_command()
+        cmd += ["--incr", "--relax"]
+        cmd += ["--nolog"]
         for include_dir in source_file.include_dirs:
             cmd += ["--include", f"{include_dir}"]
         for define_name, define_val in source_file.defines.items():
