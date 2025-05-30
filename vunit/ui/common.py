@@ -110,5 +110,12 @@ SIMULATORS = {
         "vunit_name": "ghdl",
         "win_path_pattern": "git-sdk-64/mingw64/bin",
         "linux_path_pattern": "ghdl/bin",
+        "output_path": "ghdl",
     },
+    "nvc": {
+        "vunit_name" : "nvc",
+        "win_path_pattern": "Program*/NVC/bin",
+        "linux_path_pattern": None,
+        "output_path": "nvc",
+    }
 }
