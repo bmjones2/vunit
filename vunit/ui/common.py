@@ -115,7 +115,7 @@ SIMULATORS = {
     "nvc": {
         "vunit_name" : "nvc",
         "win_path_pattern": "Program*/NVC/bin",
-        "linux_path_pattern": None,
+        "linux_path_pattern": "usr/bin",
         "output_path": "nvc",
     }
 }
