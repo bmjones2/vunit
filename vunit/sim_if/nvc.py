@@ -36,6 +36,7 @@ class NVCInterface(SimulatorInterface):  # pylint: disable=too-many-instance-att
 
     compile_options = [
         ListOfStringOption("nvc.a_flags"),
+        ListOfStringOption("nvc.flags"),
     ]
 
     sim_options = [
@@ -224,6 +225,8 @@ class NVCInterface(SimulatorInterface):  # pylint: disable=too-many-instance-att
         cmd = self._get_command(
             source_file.get_vhdl_standard(), source_file.library.name, source_file.library.directory
         )
+
+        cmd += source_file.compile_options.get("nvc.flags", [])
 
         cmd += ["-a"]
         cmd += source_file.compile_options.get("nvc.a_flags", [])
