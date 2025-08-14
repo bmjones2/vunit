@@ -42,6 +42,7 @@ class XSimInterface(SimulatorInterface):
         BooleanOption("xsim.enable_glbl"),
         ListOfStringOption("xsim.xelab_flags"),
         ListOfStringOption("xsim.xsim_flags"),
+        StringOption("xsim.init_file.gui"),
     ]
 
     @staticmethod
@@ -378,7 +379,12 @@ class XSimInterface(SimulatorInterface):
                         os.remove(vcd_path)
 
                     if self._gui == True:
-                        xsim_startup_file.write("create_wave_config; add_wave /; set_property needs_save false [current_wave_config]\n")
+                        init_file = config.sim_options.get(self.name + ".init_file.gui", None)
+                        if init_file is not None:
+                            xsim_startup_file.write(f"set vunit_tb_path \"{fix_path(str(Path(config.tb_path).resolve()))}\"\n")
+                            xsim_startup_file.write(f'source {fix_path(str(Path(init_file).resolve()))!s}\n')
+                        else:
+                            xsim_startup_file.write("create_wave_config; add_wave /; set_property needs_save false [current_wave_config]\n")
                         if self._vcd_enable:
                             xsim_startup_file.write(f"open_vcd {vcd_path}\n")
                             xsim_startup_file.write("log_vcd *\n")
@@ -401,6 +407,12 @@ class XSimInterface(SimulatorInterface):
         except Process.NonZeroExitCode:
             status = False
         return status
+
+def fix_path(path):
+    """
+    Adjust path for TCL usage
+    """
+    return path.replace("\\", "/").replace(" ", "\\ ")
 
 def encode_generic_value(value):
     """
