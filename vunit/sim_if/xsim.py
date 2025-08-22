@@ -189,12 +189,12 @@ class XSimInterface(SimulatorInterface):
         """
         cmd = []
         for library_name, library_path in self._libraries.items():
-            if library_path:
-                # new_path = Path(library_path) / ".." / ".." / ".." / "preprocessed" / Path(library_path).name
-                # new_path = new_path.resolve()
-                cmd += ["-L", f"{library_name}={library_path}"]
-            else:
-                cmd += ["-L", library_name]
+            # if library_path:
+            #     # new_path = Path(library_path) / ".." / ".." / ".." / "preprocessed" / Path(library_path).name
+            #     # new_path = new_path.resolve()
+            #     cmd += ["-L", f"{library_name}={library_path}"]
+            # else:
+            cmd += ["-L", library_name]
         return cmd
 
     @staticmethod
@@ -302,7 +302,6 @@ class XSimInterface(SimulatorInterface):
 
         cmd = [join(self._prefix, self._xelab)]
         cmd += ["-debug", "all"] # 'all' allows debugging other packages
-        # cmd += self.libraries_command()
 
         cmd += ["--notimingchecks"]
         cmd += ["--nospecify"]
@@ -316,6 +315,7 @@ class XSimInterface(SimulatorInterface):
         snapshot = "vunit_test"
         cmd += ["--snapshot", snapshot]
         cmd += ["--initfile", self._sim_cfg_file_name]
+        cmd += self.libraries_command()
 
         enable_glbl = config.sim_options.get(self.name + ".enable_glbl", None)
 
