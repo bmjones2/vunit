@@ -121,7 +121,7 @@ SIMULATORS = {
     "xsim": {
         "vunit_name" : "xsim",
         "win_path_pattern": "Xilinx/Vivado/2024.2/bin",
-        "linux_path_pattern": "Xilinx/Vivado/*/bin",
+        "linux_path_pattern": ["Xilinx/Vivado/*/bin", "Xilinx/*/Vivado/bin"],
         "output_path": "xsim",
     }
 }
